@@ -686,9 +686,10 @@ async function rereadBook(id) {
   openBook(id);
 }
 
-async function openBook(id) {
+// goto: an annotation (highlight, bookmark or favourite) to open the book at.
+async function openBook(id, goto = null) {
   const b = S.books.get(id);
-  if (!b.hasFile) return attachFile(b).then(ok => ok && openBook(id));
+  if (!b.hasFile) return attachFile(b).then(ok => ok && openBook(id, goto));
   let file = await db.get('files', id);
   if (!file && currentUser()) {
     const t = toast('Downloading book from your cloud…', { ms: 60000 });
@@ -704,7 +705,7 @@ async function openBook(id) {
   const prefsKey = isPdfBook ? 'pdfReaderPrefs' : 'readerPrefs';
   const readerPrefs = await db.getSetting(prefsKey, {});
   (isPdfBook ? openPdfReader : openReader)({
-    book: b, blob: file.blob,
+    book: b, blob: file.blob, goto,
     prefs: readerPrefs,
     savePrefs: p => db.setSetting(prefsKey, p),
     saveBook: async bk => { await saveBook(bk); },
@@ -771,7 +772,7 @@ async function openBookSheet(id) {
     <div class="bs-actions">${primary}</div>
     <div class="bs-section"><span class="label">Shelf</span><div class="chips">${moves}</div></div>
     <div class="bs-section"><span class="label">Show this book as</span><div class="chips">${faces}</div></div>
-    ${b.hasFile ? `<div class="bs-section"><span class="label">In this book</span><p class="muted">${hl} highlight${hl === 1 ? '' : 's'} · ${notes} note${notes === 1 ? '' : 's'} · ${marks} bookmark${marks === 1 ? '' : 's'} · ${favs} favourite page${favs === 1 ? '' : 's'}</p></div>` : ''}
+    ${b.hasFile && anns.length ? savedPlacesHtml(anns, { hl, marks, favs }) : ''}
     ${b.description ? `<details class="bs-desc"><summary>About this book</summary><p>${esc(b.description)}</p></details>` : ''}
     <div class="bs-list">
       <button data-b="edit">${icon('edit')} Edit details & spine colour</button>
@@ -788,6 +789,14 @@ async function openBookSheet(id) {
           $$('.star', sheet).forEach((s, i) => s.classList.toggle('on', i < b.rating));
           return;
         }
+        const tab = e.target.closest('[data-saved-tab]');
+        if (tab) {
+          $$('[data-saved-tab]', sheet).forEach(t => t.classList.toggle('on', t === tab));
+          $$('[data-saved-pane]', sheet).forEach(p => { p.hidden = p.dataset.savedPane !== tab.dataset.savedTab; });
+          return;
+        }
+        const place = e.target.closest('[data-ann]');
+        if (place) { const a = anns.find(x => x.id === place.dataset.ann); close(); openBook(id, a); return; }
         const fb = e.target.closest('[data-face-book]');
         if (fb) {
           b.face = fb.dataset.faceBook || null;
@@ -811,6 +820,25 @@ async function openBookSheet(id) {
     },
   });
 }
+
+// Highlights, bookmarks and liked pages under the book's details; tapping one opens the book right there.
+function savedPlacesHtml(anns, counts) {
+  const order = (x, y) => (x.page || 0) - (y.page || 0) || x.createdAt - y.createdAt;
+  const hls = anns.filter(a => a.type === 'highlight').sort(order);
+  const marks = anns.filter(a => a.type === 'bookmark').sort(order);
+  const favs = anns.filter(a => a.type === 'fav').sort(order);
+  const row = (a, kind) => kind === 'highlight'
+    ? `<button class="saved-row" data-ann="${a.id}"><span class="saved-quote" style="--hl:${HL[a.color] || HL.yellow}">“${esc(a.text)}”</span>
+        ${a.note ? `<span class="saved-note">${icon('note')} ${esc(a.note)}</span>` : ''}
+        <small>${esc([a.chapter, typeof a.page === 'number' ? `p. ${a.page}` : ''].filter(Boolean).join(' · '))}</small></button>`
+    : `<button class="saved-row" data-ann="${a.id}"><span class="saved-mark">${icon(kind === 'fav' ? 'heart' : 'bookmark')} ${esc(typeof a.page === 'number' ? `Page ${a.page}` : a.page || a.chapter || 'Saved page')}</span>
+        ${a.text ? `<small>${esc(a.text.slice(0, 110))}…</small>` : ''}</button>`;
+  const pane = (key, list, kind, empty) => `<div class="saved-pane" data-saved-pane="${key}" ${key === 'h' ? '' : 'hidden'}>${list.length ? list.map(a => row(a, kind)).join('') : `<p class="muted small">${empty}</p>`}</div>`;
+  return `<div class="bs-section saved"><span class="label">Your places in this book</span>
+    <div class="seg"><button class="on" data-saved-tab="h">Highlights (${counts.hl})</button><button data-saved-tab="b">Saved (${counts.marks})</button><button data-saved-tab="f">Liked (${counts.favs})</button></div>
+    ${pane('h', hls, 'highlight', 'No highlights yet.')}${pane('b', marks, 'bookmark', 'No bookmarked pages yet.')}${pane('f', favs, 'fav', 'No liked pages yet.')}</div>`;
+}
+const HL = { yellow: '#ffd84d', green: '#86df8a', blue: '#78c3ff', pink: '#ff8db5', purple: '#c4a0ff' };
 
 function openEdit(id) {
   const b = S.books.get(id);
@@ -956,7 +984,7 @@ async function attachFile(b) {
 
 function openAdd() {
   openSheet(`<div class="add-sheet"><h3>Add books</h3>
-    <button class="add-opt" data-add="find">${icon('library')}<span><strong>Find books on this device</strong><small>Scan a folder (like Downloads) for EPUB and PDF files</small></span></button>
+    <button class="add-opt" data-add="find">${icon('library')}<span><strong>Find books on this device</strong><small>${window.showDirectoryPicker ? 'Scan a folder (like Downloads) for EPUB and PDF files' : 'Pick several EPUB and PDF files at once'}</small></span></button>
     <button class="add-opt" data-add="reading">${icon('open')}<span><strong>Import EPUB or PDF to start reading</strong><small>Goes on your Reading shelf</small></span></button>
     <button class="add-opt" data-add="tbr">${icon('file')}<span><strong>Import EPUB or PDF for later</strong><small>Goes on your TBR shelf</small></span></button>
     <button class="add-opt" data-add="read">${icon('check')}<span><strong>Import a book I've finished</strong><small>Goes on your Read shelf</small></span></button>
@@ -1125,7 +1153,7 @@ function openMenu() {
   const off = booksOn('none').length;
   openSheet(`<div class="menu-sheet">
     <button data-m="library">${icon('library')}<span>Library<small>${off} book${off === 1 ? '' : 's'} off the shelves</small></span></button>
-    <button data-m="find">${icon('search')}<span>Find books on this device<small>Scan a folder for EPUB and PDF files</small></span></button>
+    <button data-m="find">${icon('search')}<span>Find books on this device<small>${window.showDirectoryPicker ? 'Scan a folder for EPUB and PDF files' : 'Pick several EPUB and PDF files at once'}</small></span></button>
     <button data-m="widget">${icon('covers')}<span>Shelf widget<small>A small view of 3–4 rows of one shelf</small></span></button>
     <button data-m="name">${icon('edit')}<span>Your name<small>${S.profile && S.profile.name ? esc(S.profile.name) : 'Not set'}</small></span></button>
     <button data-m="export">${icon('download')}<span>Back up library<small>Books, EPUBs, notes & layout in one .zip</small></span></button>
@@ -1236,7 +1264,10 @@ function renderGreeting() {
   const el = $('#greeting');
   if (!el) return;
   const name = S.profile && S.profile.name;
-  el.textContent = name ? `Hi ${name}, ${greetingWord().charAt(0).toLowerCase() + greetingWord().slice(1)}` : greetingWord();
+  const word = greetingWord();
+  el.innerHTML = name
+    ? `<span class="g-name">Hi ${esc(name)},</span> <span class="g-time">${word.charAt(0).toLowerCase() + word.slice(1)}</span>`
+    : `<span class="g-time">${word}</span>`;
 }
 
 function openWelcome(editing = false) {
@@ -1267,7 +1298,7 @@ function openWelcome(editing = false) {
 
 function offerFind() {
   openSheet(`<div class="confirm"><h3>Already have books?</h3>
-    <p>Fable can look through a folder on this device (like Downloads or Books) and show every EPUB and PDF it finds, so you can add them in one go.</p>
+    <p>${window.showDirectoryPicker ? 'Fable can look through a folder on this device (like Downloads or Books) and show every EPUB and PDF it finds, so you can add them in one go.' : 'Pick all the EPUB and PDF files you want from your phone in one go and they all go onto your shelves.'}</p>
     <div class="btn-row"><button class="btn ghost" data-close>Later</button><button class="btn primary" data-go>${icon('search')} Find my books</button></div></div>`, {
     onMount: (sheet, close) => { $('[data-go]', sheet).onclick = () => { close(); findOnDevice(); }; },
   });
@@ -1291,8 +1322,9 @@ async function findOnDevice() {
     files = await scanDir(dir);
     t.close();
   } else {
-    files = await pickFolderFallback();
-    if (!files) return;
+    // Phones can't hand a website a whole folder reliably, so pick the books themselves (select many at once).
+    files = await pickFiles(BOOK_ACCEPT, true);
+    if (!files.length) return;
   }
   showFound(files);
 }
@@ -1304,19 +1336,6 @@ async function scanDir(dir, depth = 0, out = []) {
     else if (entry.kind === 'directory' && depth < 4 && !entry.name.startsWith('.')) await scanDir(entry, depth + 1, out);
   }
   return out;
-}
-
-function pickFolderFallback() {
-  return new Promise(resolve => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    if ('webkitdirectory' in input && !/iPhone|iPad/.test(navigator.userAgent)) input.webkitdirectory = true;
-    else input.accept = BOOK_ACCEPT;
-    input.onchange = () => resolve([...input.files].filter(meta.isBookFile));
-    input.addEventListener('cancel', () => resolve(null));
-    input.click();
-  });
 }
 
 async function rescanFolder() {

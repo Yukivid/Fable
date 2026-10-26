@@ -60,7 +60,7 @@ export async function openPdfReader(opts) {
 
   P = {
     ...opts, rec: opts.book, prefs, el, stage: $('.pdf-stage', el), view: $('.pdf-view', el),
-    pdf: null, page: opts.book.lastPage || 1, sizes: [], anns: [], chapters: [], rendered: new Map(),
+    pdf: null, page: (opts.goto && opts.goto.page) || opts.book.lastPage || 1, flashId: opts.goto && opts.goto.type === 'highlight' ? opts.goto.id : null, sizes: [], anns: [], chapters: [], rendered: new Map(),
     navigated: false, finished: false, sel: null, saveT: 0, chromeT: 0, observer: null,
   };
   history.pushState({ reader: true }, '');
@@ -462,7 +462,7 @@ function drawHighlights(n) {
   if (!el) return;
   const layer = $('.hl-layer', el);
   layer.innerHTML = P.anns.filter(a => a.type === 'highlight' && a.page === n).map(a =>
-    a.rects.map(([x, y, w, h]) => `<i class="${a.note ? 'has-note' : ''}" style="left:${x * 100}%;top:${y * 100}%;width:${w * 100}%;height:${h * 100}%;background:${HL_COLORS[a.color] || HL_COLORS.yellow}"></i>`).join('')).join('');
+    a.rects.map(([x, y, w, h]) => `<i class="${a.note ? 'has-note' : ''} ${a.id === P.flashId ? 'flash' : ''}" style="left:${x * 100}%;top:${y * 100}%;width:${w * 100}%;height:${h * 100}%;background:${HL_COLORS[a.color] || HL_COLORS.yellow}"></i>`).join('')).join('');
 }
 
 async function addHighlight(color, note = '') {

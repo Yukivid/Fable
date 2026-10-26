@@ -80,7 +80,8 @@ export async function openReader(opts) {
     R.book = ePub(await opts.blob.arrayBuffer());
     await R.book.ready;
     R.anns = await db.byIndex('annotations', 'bookId', opts.book.id);
-    await createRendition(opts.book.lastCfi || undefined);
+    await createRendition((opts.goto && opts.goto.cfi) || opts.book.lastCfi || undefined);
+    if (opts.goto && opts.goto.type === 'highlight') flashQuote(opts.goto.cfi);
     loadLocations();
   } catch (e) {
     console.error(e);
@@ -433,6 +434,14 @@ function openAnnotation(a) {
       }
     }),
   });
+}
+
+// Briefly underline a quote the reader jumped to from the book's details.
+function flashQuote(cfi) {
+  try {
+    R.rendition.annotations.add('underline', cfi, {}, null, 'flash-quote', { stroke: '#f2a548', 'stroke-width': '3', 'stroke-opacity': '1' });
+    setTimeout(() => { try { R && R.rendition.annotations.remove(cfi, 'underline'); } catch (e) { /* gone */ } }, 2600);
+  } catch (e) { /* cfi not on screen */ }
 }
 
 // ---------- bookmarks & favourite pages ----------

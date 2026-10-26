@@ -7,10 +7,10 @@
   --ui-ink: #fff;
   --sheet: #1d1c21; --sheet-2: #29272e; --sheet-ink: #f2ede5; --muted: #a39e96;
   --accent: #f2b35e; --accent-ink: #2a1c0c; --danger: #e4606d;
-  --serif: 'Fraunces', 'Iowan Old Style', Georgia, serif;
-  --sans: 'Rokkitt', 'Rockwell', Georgia, serif;
-  --ui-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --logo: 'Righteous', 'Rokkitt', system-ui, sans-serif;
+  --serif: 'Playfair Display', 'Iowan Old Style', Georgia, serif;
+  --sans: 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ui-sans: 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --logo: 'Playfair Display', Georgia, serif;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   color-scheme: dark;
@@ -37,7 +37,7 @@ body.paused * { animation-play-state: paused !important; }
   display: flex; align-items: center; justify-content: space-between;
   padding: calc(10px + var(--safe-t)) 16px 6px; gap: 8px;
 }
-.brand { display: flex; align-items: center; gap: 8px; font-family: var(--logo); font-size: 26px; font-weight: 400; letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.25); }
+.brand { display: flex; align-items: center; gap: 8px; font-family: var(--logo); font-style: italic; font-size: 28px; font-weight: 600; letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.25); }
 .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(160deg, #ffcf7d, #e98b3a); color: #4a220a; box-shadow: 0 4px 16px rgba(240, 150, 60, .45); }
 .brand-mark .ic { width: 20px; height: 20px; fill: #fff3d6; stroke: #7a3a10; stroke-width: 1.2; }
 .top-actions { display: flex; gap: 4px; }
@@ -115,8 +115,7 @@ body.no-titles .case { padding-top: 22px; }
 
 .rows { position: relative; z-index: 1; }
 .row { position: relative; display: flex; flex-direction: column; justify-content: flex-end; margin-bottom: calc(var(--u) * 12); }
-.row-items { position: relative; z-index: 2; flex: 1; display: flex; align-items: flex-end; justify-content: center; padding: 0 calc(var(--u) * 6); }
-.case.spine-view .row-items { justify-content: center; }
+.row-items { position: relative; z-index: 2; flex: 1; display: flex; align-items: flex-end; justify-content: flex-start; padding: 0 calc(var(--u) * 6); }
 .plank { position: relative; z-index: 1; margin: 0 calc(var(--u) * -4); flex: none; filter: brightness(var(--room)); }
 .plank i { display: block; }
 .plank-top {
@@ -333,7 +332,7 @@ body.arranging .toasts { bottom: calc(190px + var(--safe-b)); }
 .bs-cover img { width: 100%; height: 100%; object-fit: cover; }
 .bs-cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.35), rgba(255,255,255,.18) 3%, transparent 9%); }
 .bs-info { min-width: 0; }
-.bs-info h3 { margin: 2px 0 4px; line-height: 1.15; }
+.bs-info h3 { margin: 2px 0 4px; line-height: 1.15; font-family: var(--serif); font-weight: 600; }
 .bs-author { margin: 0; color: #d6cfc4; }
 .bs-facts { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
 .bs-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
@@ -500,15 +499,17 @@ body.arranging .toasts { bottom: calc(190px + var(--safe-b)); }
 }
 
 /* ---------- greeting, welcome ---------- */
-body { font-size: 16px; }
-.greeting { margin: -2px 20px 0; text-align: center; font-family: var(--sans); font-size: 17px; font-weight: 500; letter-spacing: .01em; color: var(--ui-ink); opacity: .92; text-shadow: 0 1px 10px rgba(0,0,0,.3); min-height: 1.2em; }
+body { font-size: 15px; }
+.brand-wrap { display: flex; flex-direction: column; min-width: 0; }
+.greeting { margin: -6px 16px 2px 58px; font-family: var(--sans); font-size: 14.5px; font-weight: 500; color: var(--ui-ink); opacity: .95; text-shadow: 0 1px 10px rgba(0,0,0,.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.greeting .g-name { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 17px; }
 .greeting:empty { display: none; }
 .welcome { text-align: center; }
 .welcome .btn-row { justify-content: center; }
 .welcome input { text-align: center; font-size: 17px; margin-top: 8px; }
 .welcome-mark { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; margin-top: 8px; background: linear-gradient(160deg, #ffcf7d, #e98b3a); box-shadow: 0 8px 26px rgba(240,150,60,.45); }
 .welcome-mark .ic { width: 30px; height: 30px; fill: #fff3d6; stroke: #7a3a10; stroke-width: 1.2; }
-.welcome h3 { font-family: var(--logo); font-weight: 400; font-size: 26px; }
+.welcome h3 { font-family: var(--logo); font-style: italic; font-weight: 600; font-size: 28px; }
 
 /* ---------- wood panel wall ---------- */
 body.wood-wall .case {
@@ -616,3 +617,17 @@ body.widget-mode .case { cursor: pointer; }
 .font-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; font-size: 15.5px; }
 .font-row select { flex: 0 1 auto; padding: 9px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14); background: var(--sheet-2); color: var(--sheet-ink); font: inherit; font-size: 14px; }
 .small-toggle { font-size: 13.5px; color: #cfc8bd; margin-top: 8px; }
+
+/* ---------- saved places in book details ---------- */
+.bs-section.saved .seg { margin-top: 0; }
+.saved-pane { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.saved-row { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 11px 13px; border-radius: 12px; background: var(--sheet-2); transition: background .15s; }
+.saved-row:hover { background: #34313a; }
+.saved-quote { font-family: var(--serif); font-size: 14.5px; line-height: 1.45; padding-left: 10px; border-left: 3px solid var(--hl); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.saved-note { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; color: #e6dfd4; }
+.saved-note .ic, .saved-mark .ic { width: 15px; height: 15px; flex: none; }
+.saved-mark { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+.saved-mark .ic { color: var(--accent); fill: var(--accent); }
+.saved-row small { color: var(--muted); font-size: 12px; }
+.hl-layer i.flash { animation: hlFlash 2.4s ease-out; opacity: .42; }
+@keyframes hlFlash { 0%, 30%, 60% { opacity: .9; box-shadow: 0 0 0 3px #f2a548; } 15%, 45% { opacity: .3; } 100% { opacity: .42; box-shadow: none; } }
