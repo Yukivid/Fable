@@ -4,6 +4,7 @@ import { DECOR_TYPES, decorSvg } from './decor.js';
 import { icon, esc, $, $$, openSheet, toast, confirmSheet, stars, sheetOpen, closeAllSheets, closeSheet } from './ui.js';
 import { setSound, setVolume, dust, SOUND_NAMES } from './ambience.js';
 import { openReader, readerOpen } from './reader.js';
+import { openPdfReader, pdfReaderOpen } from './pdfreader.js';
 import { initSync, cloudConfigured, currentUser, syncStatus, onSyncStatus, signIn, signOut, syncNow, fetchFile } from './sync.js';
 
 // ---------- constants ----------
@@ -33,6 +34,9 @@ const WALLS = {
   sage:     { name: 'Sage',     bg: '#c8d1bd', ink: '#2a3324' },
   blush:    { name: 'Blush',    bg: '#ecd8d0', ink: '#43292a' },
   glass:    { name: 'Glass',    bg: 'rgba(22, 24, 30, .42)', ink: '#ffffff', glass: true },
+  walnutpanel: { name: 'Walnut panel', bg: '#3a2416', ink: '#f6ecdf', wood: true },
+  oakpanel:    { name: 'Oak panel',    bg: '#7d5536', ink: '#fbf3e6', wood: true },
+  ashpanel:    { name: 'Pale wood',    bg: '#b89a78', ink: '#2e2116', wood: true },
 };
 const BACKDROPS = {
   sky:    { name: 'Sky',    css: 'linear-gradient(180deg,#25518c 0%,#5a8ac3 38%,#a9c4e2 66%,#dfe8f2 100%)' },
@@ -77,11 +81,18 @@ const booksOn = shelf => [...S.books.values()].filter(b => b.shelf === shelf);
 // ---------- boot ----------
 
 async function boot() {
+  const params = new URLSearchParams(location.search);
+  S.widget = params.get('widget') ? { shelf: params.get('widget'), rows: Math.max(1, Math.min(6, +params.get('rows') || 4)) } : null;
   buildChrome();
   await loadState();
   applyTheme();
+  if (S.widget) document.body.classList.add('widget-mode');
   renderAll();
-  goTo(booksOn('reading').length || !S.books.size ? 'reading' : 'read', false);
+  renderGreeting();
+  setInterval(renderGreeting, 5 * 60 * 1000);
+  goTo(S.widget ? S.widget.shelf : booksOn('reading').length || !S.books.size ? 'reading' : 'read', false);
+  if (!S.widget && !S.profile) setTimeout(openWelcome, 600);
+  else if (!S.widget) setTimeout(rescanFolder, 1500);
   if (S.prefs.sound !== 'off') armSound();
   document.body.classList.add('ready');
   initSync({ onRemoteChange: reloadFromDb });
@@ -89,9 +100,10 @@ async function boot() {
 }
 
 async function loadState() {
-  const [books, prefs, layouts, decor, backdrop] = await Promise.all([
-    db.all('books'), db.getSetting('prefs'), db.getSetting('layouts'), db.getSetting('decor'), db.getSetting('backdropImage'),
+  const [books, prefs, layouts, decor, backdrop, profile] = await Promise.all([
+    db.all('books'), db.getSetting('prefs'), db.getSetting('layouts'), db.getSetting('decor'), db.getSetting('backdropImage'), db.getSetting('profile'),
   ]);
+  S.profile = profile || null;
   S.books = new Map(books.map(b => [b.id, b]));
   S.prefs = { ...structuredClone(DEFAULT_PREFS), ...(prefs || {}) };
   S.prefs.view = { ...DEFAULT_PREFS.view, ...(prefs && prefs.view) };
@@ -108,6 +120,7 @@ async function reloadFromDb() {
   await loadState();
   applyTheme();
   renderAll();
+  renderGreeting();
   setCurrent(S.current);
 }
 
@@ -164,6 +177,7 @@ function buildChrome() {
       <button class="icon-btn" data-act="menu" title="More">${icon('dots')}</button>
     </div>
   </header>
+  <p class="greeting" id="greeting"></p>
   <nav class="tabs" role="tablist">
     ${SHELVES.map(s => `<button class="tab" role="tab" data-tab="${s.key}">${s.label}<span class="count" data-count="${s.key}"></span></button>`).join('')}
     <span class="tab-ink"></span>
@@ -197,7 +211,7 @@ function buildChrome() {
   let rt = 0;
   window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { renderAll(); goTo(S.current, false); }, 120); });
   window.addEventListener('keydown', e => {
-    if (readerOpen() || sheetOpen() || e.target.closest('input,textarea')) return;
+    if (readerOpen() || pdfReaderOpen() || sheetOpen() || e.target.closest('input,textarea')) return;
     const i = SHELVES.findIndex(s => s.key === S.current);
     if (e.key === 'ArrowRight' && i < 2) goTo(SHELVES[i + 1].key);
     if (e.key === 'ArrowLeft' && i > 0) goTo(SHELVES[i - 1].key);
@@ -207,8 +221,8 @@ function buildChrome() {
   window.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
   window.addEventListener('drop', e => {
     e.preventDefault();
-    const files = [...(e.dataTransfer?.files || [])].filter(f => /\.epub$/i.test(f.name));
-    if (files.length && !readerOpen()) importFiles(files, S.current);
+    const files = [...(e.dataTransfer?.files || [])].filter(meta.isBookFile);
+    if (files.length && !readerOpen() && !pdfReaderOpen()) importFiles(files, S.current);
   });
   // Opening .epub files with the installed app.
   if ('launchQueue' in window) {
@@ -222,6 +236,7 @@ function buildChrome() {
 
 function onClick(e) {
   const t = e.target;
+  if (S.widget) { location.href = './'; return; }
   const act = t.closest('[data-act]');
   if (act) {
     const a = act.dataset.act;
@@ -235,6 +250,7 @@ function onClick(e) {
     if (a === 'continue') return openBook(act.dataset.id);
     if (a === 'empty-import') return pickAndImport(S.current === 'reading' ? 'reading' : S.current);
     if (a === 'empty-search') return openSearch();
+    if (a === 'find') return findOnDevice();
   }
   const tab = t.closest('[data-tab]');
   if (tab) return goTo(tab.dataset.tab);
@@ -289,7 +305,8 @@ function applyTheme() {
   const bd = p.backdrop === 'custom' && S.backdropUrl ? `center / cover no-repeat url("${S.backdropUrl}")` : (BACKDROPS[p.backdrop] || BACKDROPS.sky).css;
   r.setProperty('--backdrop', bd);
   document.body.classList.toggle('glass-wall', !!wall.glass);
-  document.body.classList.toggle('light-wall', !wall.glass && isLight(wall.bg));
+  document.body.classList.toggle('wood-wall', !!wall.wood);
+  document.body.classList.toggle('light-wall', !wall.glass && !wall.wood && isLight(wall.bg));
   document.body.classList.toggle('light-backdrop', ['paper'].includes(p.backdrop));
   document.body.classList.toggle('no-titles', !p.titles);
   document.querySelector('meta[name=theme-color]').setAttribute('content', p.backdrop === 'paper' ? '#efe8dc' : '#1b2638');
@@ -328,10 +345,11 @@ function describe(id, view, m) {
   }
   const b = S.books.get(id);
   const h = meta.hash(b.id);
-  if (view === 'cover') return { id, kind: 'book', b, w: m.cw, h: m.coverH * (0.94 + (h % 7) / 100) };
+  const v = b.face || view; // a book can face differently from the rest of its shelf
+  if (v === 'cover') return { id, kind: 'book', view: v, b, w: m.cw, h: m.coverH * (0.94 + (h % 7) / 100) };
   const pages = b.pages || 300;
   const w = Math.max(15, Math.min(42, 9 + pages * 0.036)) * m.u;
-  return { id, kind: 'book', b, w, h: m.coverH * (0.83 + (h % 15) / 100) };
+  return { id, kind: 'book', view: v, b, w, h: m.coverH * (0.83 + (h % 15) / 100) };
 }
 
 function pack(items, view, m) {
@@ -339,7 +357,8 @@ function pack(items, view, m) {
   let x = 0;
   items.forEach((it, i) => {
     const prev = rows[rows.length - 1].at(-1);
-    const gap = !prev ? 0 : prev.kind === 'book' && it.kind === 'book' ? (view === 'cover' ? 9 : 1.4) * m.u : 8 * m.u;
+    const both = prev && prev.kind === 'book' && it.kind === 'book';
+    const gap = !prev ? 0 : !both ? 8 * m.u : prev.view === 'spine' && it.view === 'spine' ? 1.4 * m.u : prev.view === 'cover' && it.view === 'cover' ? 9 * m.u : 4 * m.u;
     if (prev && x + gap + it.w > m.inner) { rows.push([]); x = 0; }
     const row = rows[rows.length - 1];
     it.ml = row.length ? gap : 0;
@@ -364,12 +383,16 @@ function renderShelf(shelf) {
 
   const items = itemsFor(shelf).map(id => describe(id, view, m));
   const rows = pack(items, view, m);
+  if (S.widget) rows.length = Math.min(rows.length, S.widget.rows);
   const minRows = Math.max(3, Math.ceil((window.innerHeight - 200) / (m.rowH + 20 * m.u)));
-  while (rows.length < minRows) rows.push([]);
-  rows.push([]); // always leave an empty shelf to grow into
+  if (S.widget) { while (rows.length < S.widget.rows) rows.push([]); }
+  else {
+    while (rows.length < minRows) rows.push([]);
+    rows.push([]); // always leave an empty shelf to grow into
+  }
 
   $('.rows', caseEl).innerHTML = rows.map(r => `<div class="row" style="height:${m.rowH}px">
-      <div class="row-items">${r.map(it => itemHtml(it, view, shelf, m)).join('')}</div>
+      <div class="row-items">${r.map(it => itemHtml(it, it.view || view, shelf, m)).join('')}</div>
       <div class="plank"><i class="plank-top"></i><i class="plank-front"></i></div></div>`).join('');
 
   const books = booksOn(shelf);
@@ -383,8 +406,8 @@ function renderShelf(shelf) {
   const hint = $('.hint', page);
   if (!books.length) {
     hint.innerHTML = shelf === 'reading'
-      ? `Nothing on the go. <button class="link" data-act="empty-import">Import an EPUB</button> to start reading.`
-      : `This shelf is empty. <button class="link" data-act="empty-search">Search for a book</button> or <button class="link" data-act="empty-import">import an EPUB</button>.`;
+      ? `Nothing on the go. <button class="link" data-act="empty-import">Import an EPUB or PDF</button> or <button class="link" data-act="find">find books on this device</button>.`
+      : `This shelf is empty. <button class="link" data-act="empty-search">Search for a book</button> or <button class="link" data-act="empty-import">import an EPUB or PDF</button>.`;
   } else hint.textContent = '';
 
   renderContinue(shelf, page);
@@ -672,16 +695,18 @@ async function openBook(id) {
     file = await fetchFile(id).catch(() => null);
     t.close();
   }
-  if (!file) { toast('EPUB file missing — attach it again'); b.hasFile = false; await saveBook(b); return; }
+  if (!file) { toast('Book file missing — attach it again'); b.hasFile = false; await saveBook(b); return; }
   if (b.shelf !== 'reading') { setShelf(b, 'reading'); b.startedAt = b.startedAt || Date.now(); saveLayouts(); }
   b.lastOpened = Date.now();
   await saveBook(b);
   closeAllSheets();
-  const readerPrefs = await db.getSetting('readerPrefs', {});
-  openReader({
+  const isPdfBook = b.format === 'pdf';
+  const prefsKey = isPdfBook ? 'pdfReaderPrefs' : 'readerPrefs';
+  const readerPrefs = await db.getSetting(prefsKey, {});
+  (isPdfBook ? openPdfReader : openReader)({
     book: b, blob: file.blob,
     prefs: readerPrefs,
-    savePrefs: p => db.setSetting('readerPrefs', p),
+    savePrefs: p => db.setSetting(prefsKey, p),
     saveBook: async bk => { await saveBook(bk); },
     onFinished: bk => markFinished(bk),
     onClose: () => { renderAll(); goTo(S.books.get(id).shelf, false); },
@@ -727,11 +752,12 @@ async function openBookSheet(id) {
   if (b.shelf === 'reading') primary = `<button class="btn primary big" data-b="open">${icon('open')} ${b.progress ? `Continue reading · ${pct}%` : 'Start reading'}</button>`;
   else if (b.shelf === 'read') primary = `<button class="btn primary big" data-b="reread">${icon('reread')} Read again</button>`;
   else if (b.hasFile) primary = `<button class="btn primary big" data-b="open">${icon('open')} Start reading</button>`;
-  if (!b.hasFile) primary += `<button class="btn ghost big" data-b="attach">${icon('file')} Attach EPUB to read in app</button>`;
+  if (!b.hasFile) primary += `<button class="btn ghost big" data-b="attach">${icon('file')} Attach EPUB or PDF to read in app</button>`;
 
   const moves = ['read', 'reading', 'tbr'].map(s => `<button class="chip ${b.shelf === s ? 'on' : ''}" data-move="${s}" ${s === 'reading' && !b.hasFile ? 'data-needs-file="1"' : ''}>${SHELF_LABEL[s]}</button>`).join('');
-  const hl = anns.filter(a => a.type === 'highlight').length, notes = anns.filter(a => a.note).length, favs = anns.filter(a => a.type === 'fav').length;
-  const facts = [b.pages ? `${b.pages} pages` : '', b.readCount ? `Read ${b.readCount}×` : '', b.finishedAt ? `Finished ${new Date(b.finishedAt).toLocaleDateString()}` : '', b.hasFile ? 'EPUB' : 'Shelf only'].filter(Boolean);
+  const hl = anns.filter(a => a.type === 'highlight').length, notes = anns.filter(a => a.note).length, favs = anns.filter(a => a.type === 'fav').length, marks = anns.filter(a => a.type === 'bookmark').length;
+  const facts = [b.pages ? `${b.pages} pages` : '', b.readCount ? `Read ${b.readCount}×` : '', b.finishedAt ? `Finished ${new Date(b.finishedAt).toLocaleDateString()}` : '', b.hasFile ? (b.format === 'pdf' ? 'PDF' : 'EPUB') : 'Shelf only'].filter(Boolean);
+  const faces = [['', 'Shelf default'], ['cover', 'Cover'], ['spine', 'Spine']].map(([k, n]) => `<button class="chip ${(b.face || '') === k ? 'on' : ''}" data-face-book="${k}">${n}</button>`).join('');
 
   openSheet(`<div class="book-sheet">
     <div class="bs-top">
@@ -744,7 +770,8 @@ async function openBookSheet(id) {
     </div>
     <div class="bs-actions">${primary}</div>
     <div class="bs-section"><span class="label">Shelf</span><div class="chips">${moves}</div></div>
-    ${b.hasFile ? `<div class="bs-section"><span class="label">In this book</span><p class="muted">${hl} highlight${hl === 1 ? '' : 's'} · ${notes} note${notes === 1 ? '' : 's'} · ${favs} favourite page${favs === 1 ? '' : 's'}</p></div>` : ''}
+    <div class="bs-section"><span class="label">Show this book as</span><div class="chips">${faces}</div></div>
+    ${b.hasFile ? `<div class="bs-section"><span class="label">In this book</span><p class="muted">${hl} highlight${hl === 1 ? '' : 's'} · ${notes} note${notes === 1 ? '' : 's'} · ${marks} bookmark${marks === 1 ? '' : 's'} · ${favs} favourite page${favs === 1 ? '' : 's'}</p></div>` : ''}
     ${b.description ? `<details class="bs-desc"><summary>About this book</summary><p>${esc(b.description)}</p></details>` : ''}
     <div class="bs-list">
       <button data-b="edit">${icon('edit')} Edit details & spine colour</button>
@@ -759,6 +786,14 @@ async function openBookSheet(id) {
           b.rating = b.rating === r ? 0 : r;
           await saveBook(b);
           $$('.star', sheet).forEach((s, i) => s.classList.toggle('on', i < b.rating));
+          return;
+        }
+        const fb = e.target.closest('[data-face-book]');
+        if (fb) {
+          b.face = fb.dataset.faceBook || null;
+          await saveBook(b);
+          $$('[data-face-book]', sheet).forEach(c => c.classList.toggle('on', c === fb));
+          renderShelf(b.shelf);
           return;
         }
         const mv = e.target.closest('[data-move]');
@@ -837,8 +872,10 @@ function pickFiles(accept, multiple = false) {
 const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+const BOOK_ACCEPT = '.epub,.pdf,application/epub+zip,application/pdf';
+
 async function pickAndImport(shelf) {
-  const files = await pickFiles('.epub,application/epub+zip', true);
+  const files = await pickFiles(BOOK_ACCEPT, true);
   if (files.length) importFiles(files, shelf);
 }
 
@@ -848,10 +885,11 @@ async function importFiles(files, shelf) {
     const t = toast(`Opening ${file.name}…`, { ms: 120000 });
     try {
       const buf = await file.arrayBuffer();
-      const info = await meta.parseEpub(buf, m => t.update(`${file.name}: ${m}…`));
+      const pdf = meta.isPdf(file);
+      const info = await meta.parseBookFile(file, buf, m => t.update(`${file.name}: ${m}…`));
       const existing = [...S.books.values()].find(b => !b.hasFile && norm(b.title) === norm(info.title));
       const id = existing ? existing.id : uid('b_');
-      await db.put('files', { id, blob: new Blob([buf], { type: 'application/epub+zip' }) });
+      await db.put('files', { id, blob: new Blob([buf], { type: pdf ? 'application/pdf' : 'application/epub+zip' }) });
       let color = null;
       if (info.coverBlob && !(existing && S.covers.has(id) && S.covers.get(id).startsWith('blob:'))) {
         await db.put('covers', { id, blob: info.coverBlob });
@@ -859,13 +897,14 @@ async function importFiles(files, shelf) {
         color = await meta.dominantColor(info.coverBlob).catch(() => null);
       }
       let pages = info.pages;
-      if (navigator.onLine && !existing?.pages) {
+      if (navigator.onLine && !existing?.pages && !pdf) {
         t.update(`${info.title}: looking up page count…`);
         const g = await Promise.race([meta.lookupPageCount(info.title, info.author), sleep(3500).then(() => 0)]);
         if (g > 0) pages = g;
       }
-      const b = existing || { id, addedAt: Date.now(), rating: 0, readCount: 0, progress: 0, source: 'epub' };
+      const b = existing || { id, addedAt: Date.now(), rating: 0, readCount: 0, progress: 0, source: 'file' };
       Object.assign(b, {
+        format: pdf ? 'pdf' : 'epub', sourceName: file.name, sourceSize: file.size,
         title: existing?.title || info.title, author: existing?.author || info.author,
         description: b.description || info.description,
         pages: existing?.pages || pages, hasFile: true,
@@ -875,11 +914,11 @@ async function importFiles(files, shelf) {
       else if (shelf === 'reading') setShelf(b, 'reading');
       await saveBook(b);
       lastId = id;
-      t.update(existing ? `Attached EPUB to "${b.title}"` : `Added "${b.title}"`);
+      t.update(existing ? `Attached ${pdf ? 'PDF' : 'EPUB'} to "${b.title}"` : `Added "${b.title}"`);
       setTimeout(t.close, 1800);
     } catch (err) {
       console.error(err);
-      t.update(`Couldn't read ${file.name} — is it a valid EPUB?`);
+      t.update(`Couldn't read ${file.name} — is it a valid EPUB or PDF?`);
       setTimeout(t.close, 3500);
     }
   }
@@ -889,13 +928,16 @@ async function importFiles(files, shelf) {
 }
 
 async function attachFile(b) {
-  const [file] = await pickFiles('.epub,application/epub+zip');
+  const [file] = await pickFiles(BOOK_ACCEPT);
   if (!file) return false;
-  const t = toast('Reading EPUB…', { ms: 60000 });
+  const t = toast('Reading book…', { ms: 60000 });
   try {
     const buf = await file.arrayBuffer();
-    const info = await meta.parseEpub(buf);
-    await db.put('files', { id: b.id, blob: new Blob([buf], { type: 'application/epub+zip' }) });
+    const pdf = meta.isPdf(file);
+    const info = await meta.parseBookFile(file, buf);
+    await db.put('files', { id: b.id, blob: new Blob([buf], { type: pdf ? 'application/pdf' : 'application/epub+zip' }) });
+    b.format = pdf ? 'pdf' : 'epub';
+    b.sourceName = file.name; b.sourceSize = file.size;
     if (!S.covers.has(b.id) && info.coverBlob) {
       await db.put('covers', { id: b.id, blob: info.coverBlob });
       S.covers.set(b.id, URL.createObjectURL(info.coverBlob));
@@ -903,27 +945,30 @@ async function attachFile(b) {
     b.hasFile = true;
     b.pages = b.pages || info.pages;
     await saveBook(b);
-    t.update('EPUB attached'); setTimeout(t.close, 1500);
+    t.update('Book file attached'); setTimeout(t.close, 1500);
     renderAll();
     return true;
   } catch (e) {
-    t.update('That file could not be read as an EPUB'); setTimeout(t.close, 3000);
+    t.update('That file could not be read as an EPUB or PDF'); setTimeout(t.close, 3000);
     return false;
   }
 }
 
 function openAdd() {
   openSheet(`<div class="add-sheet"><h3>Add books</h3>
-    <button class="add-opt" data-add="reading">${icon('open')}<span><strong>Import EPUB to start reading</strong><small>Goes on your Reading shelf</small></span></button>
-    <button class="add-opt" data-add="tbr">${icon('file')}<span><strong>Import EPUB for later</strong><small>Goes on your TBR shelf</small></span></button>
-    <button class="add-opt" data-add="read">${icon('check')}<span><strong>Import an EPUB I've finished</strong><small>Goes on your Read shelf</small></span></button>
+    <button class="add-opt" data-add="find">${icon('library')}<span><strong>Find books on this device</strong><small>Scan a folder (like Downloads) for EPUB and PDF files</small></span></button>
+    <button class="add-opt" data-add="reading">${icon('open')}<span><strong>Import EPUB or PDF to start reading</strong><small>Goes on your Reading shelf</small></span></button>
+    <button class="add-opt" data-add="tbr">${icon('file')}<span><strong>Import EPUB or PDF for later</strong><small>Goes on your TBR shelf</small></span></button>
+    <button class="add-opt" data-add="read">${icon('check')}<span><strong>Import a book I've finished</strong><small>Goes on your Read shelf</small></span></button>
     <button class="add-opt" data-add="search">${icon('globe')}<span><strong>Search books online</strong><small>Add to Read or TBR without a file — cover, author & pages from Google Books / Open Library</small></span></button>
   </div>`, {
     onMount: (sheet, close) => sheet.addEventListener('click', e => {
       const o = e.target.closest('[data-add]');
       if (!o) return;
       close();
-      if (o.dataset.add === 'search') openSearch(); else pickAndImport(o.dataset.add);
+      if (o.dataset.add === 'search') openSearch();
+      else if (o.dataset.add === 'find') findOnDevice();
+      else pickAndImport(o.dataset.add);
     }),
   });
 }
@@ -1012,7 +1057,7 @@ function openCustomize() {
     <span class="label">Shelf wood</span>
     <div class="swatches">${sw('wood', WOODS, p.wood, v => `linear-gradient(180deg, ${v.hi}, ${v.mid} 55%, ${v.lo})`)}</div>
     <span class="label">Back wall</span>
-    <div class="swatches">${sw('wall', WALLS, p.wall, v => v.glass ? 'linear-gradient(135deg,rgba(255,255,255,.5),rgba(120,140,170,.35))' : v.bg)}</div>
+    <div class="swatches">${sw('wall', WALLS, p.wall, v => v.glass ? 'linear-gradient(135deg,rgba(255,255,255,.5),rgba(120,140,170,.35))' : v.wood ? `repeating-linear-gradient(90deg, rgba(0,0,0,.35) 0 1px, transparent 1px 15px), linear-gradient(90deg, rgba(255,255,255,.08), rgba(0,0,0,.15)), ${v.bg}` : v.bg)}</div>
     <span class="label">Backdrop</span>
     <div class="swatches">${sw('backdrop', BACKDROPS, p.backdrop, v => v.css || 'repeating-linear-gradient(45deg,#888 0 4px,#aaa 4px 8px)')}</div>
     <span class="label">Room light <small class="muted">— dim it and let the candles glow</small></span>
@@ -1080,6 +1125,9 @@ function openMenu() {
   const off = booksOn('none').length;
   openSheet(`<div class="menu-sheet">
     <button data-m="library">${icon('library')}<span>Library<small>${off} book${off === 1 ? '' : 's'} off the shelves</small></span></button>
+    <button data-m="find">${icon('search')}<span>Find books on this device<small>Scan a folder for EPUB and PDF files</small></span></button>
+    <button data-m="widget">${icon('covers')}<span>Shelf widget<small>A small view of 3–4 rows of one shelf</small></span></button>
+    <button data-m="name">${icon('edit')}<span>Your name<small>${S.profile && S.profile.name ? esc(S.profile.name) : 'Not set'}</small></span></button>
     <button data-m="export">${icon('download')}<span>Back up library<small>Books, EPUBs, notes & layout in one .zip</small></span></button>
     <button data-m="import">${icon('upload')}<span>Restore from backup</span></button>
     ${S.installEvent ? `<button data-m="install">${icon('install')}<span>Install Fable as an app</span></button>` : ''}
@@ -1091,6 +1139,9 @@ function openMenu() {
       if (!m) return;
       close();
       if (m === 'library') openLibrary();
+      if (m === 'find') findOnDevice();
+      if (m === 'widget') openWidgetSetup();
+      if (m === 'name') openWelcome(true);
       if (m === 'cloud') openCloud();
       if (m === 'export') exportBackup();
       if (m === 'import') importBackup();
@@ -1135,7 +1186,7 @@ async function exportBackup() {
     const zip = new JSZip();
     const [books, anns, files, covers, settings] = await Promise.all(['books', 'annotations', 'files', 'covers', 'settings'].map(s => db.all(s)));
     zip.file('library.json', JSON.stringify({ app: 'nook', version: 1, exportedAt: new Date().toISOString(), books, annotations: anns, settings: settings.filter(s => !(s.value instanceof Blob)) }, null, 1));
-    files.forEach(f => zip.file(`files/${f.id}.epub`, f.blob));
+    files.forEach(f => zip.file(`files/${f.id}.${f.blob.type === 'application/pdf' ? 'pdf' : 'epub'}`, f.blob));
     covers.forEach(c => zip.file(`covers/${c.id}`, c.blob));
     settings.filter(s => s.value instanceof Blob).forEach(s => zip.file(`settings/${s.key}`, s.value));
     const blob = await zip.generateAsync({ type: 'blob' });
@@ -1163,12 +1214,172 @@ async function importBackup() {
     for (const [path, entry] of Object.entries(zip.files)) {
       if (entry.dir) continue;
       const [dir, name] = path.split('/');
-      if (dir === 'files') await db.put('files', { id: name.replace(/\.epub$/, ''), blob: new Blob([await entry.async('arraybuffer')], { type: 'application/epub+zip' }) });
+      if (dir === 'files') await db.put('files', { id: name.replace(/\.(epub|pdf)$/, ''), blob: new Blob([await entry.async('arraybuffer')], { type: /\.pdf$/.test(name) ? 'application/pdf' : 'application/epub+zip' }) });
       if (dir === 'covers') await db.put('covers', { id: name, blob: await entry.async('blob') });
       if (dir === 'settings') await db.setSetting(name, await entry.async('blob'));
     }
     t.update('Restored — reloading'); setTimeout(() => location.reload(), 900);
   } catch (e) { console.error(e); t.update('That backup could not be read'); setTimeout(t.close, 3000); }
+}
+
+// ---------- greeting & name ----------
+
+function greetingWord() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  if (h >= 17 && h < 21) return 'Good evening';
+  return 'Cozy late-night reading';
+}
+
+function renderGreeting() {
+  const el = $('#greeting');
+  if (!el) return;
+  const name = S.profile && S.profile.name;
+  el.textContent = name ? `Hi ${name}, ${greetingWord().charAt(0).toLowerCase() + greetingWord().slice(1)}` : greetingWord();
+}
+
+function openWelcome(editing = false) {
+  const name = (S.profile && S.profile.name) || '';
+  openSheet(`<div class="confirm welcome">
+    ${editing ? '<h3>Your name</h3>' : `<span class="welcome-mark">${icon('flame')}</span><h3>Welcome to Fable</h3><p>Your cozy shelf for every book you've read, are reading, and want to read.</p>`}
+    <label class="muted small">What should we call you?</label>
+    <input type="text" value="${esc(name)}" placeholder="Your name" autocomplete="given-name" maxlength="40">
+    <div class="btn-row">${editing ? '<button class="btn ghost" data-close>Cancel</button>' : ''}<button class="btn primary" data-save>${editing ? 'Save' : "Let's begin"}</button></div></div>`, {
+    onMount: (sheet, close) => {
+      const input = $('input', sheet);
+      setTimeout(() => input.focus(), 300);
+      const save = async () => {
+        S.profile = { ...(S.profile || {}), name: input.value.trim() };
+        await db.setSetting('profile', S.profile);
+        renderGreeting();
+        close();
+        if (!editing) {
+          toast(`${greetingWord()}${S.profile.name ? ', ' + S.profile.name : ''}! Let's fill your shelves.`, { ms: 4000 });
+          setTimeout(() => offerFind(), 900);
+        }
+      };
+      $('[data-save]', sheet).onclick = save;
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+    },
+  });
+}
+
+function offerFind() {
+  openSheet(`<div class="confirm"><h3>Already have books?</h3>
+    <p>Fable can look through a folder on this device (like Downloads or Books) and show every EPUB and PDF it finds, so you can add them in one go.</p>
+    <div class="btn-row"><button class="btn ghost" data-close>Later</button><button class="btn primary" data-go>${icon('search')} Find my books</button></div></div>`, {
+    onMount: (sheet, close) => { $('[data-go]', sheet).onclick = () => { close(); findOnDevice(); }; },
+  });
+}
+
+// ---------- finding books already on the device ----------
+// Browsers can't read storage on their own, so the user picks a folder once.
+// Where supported (desktop Chrome/Edge) the folder is remembered and re-checked on every launch.
+
+const fileKey = f => `${f.name}|${f.size}`;
+const knownFiles = () => new Set([...S.books.values()].filter(b => b.sourceName).map(b => `${b.sourceName}|${b.sourceSize}`));
+
+async function findOnDevice() {
+  let files = [];
+  if (window.showDirectoryPicker) {
+    let dir;
+    try { dir = await window.showDirectoryPicker({ id: 'fable-books', mode: 'read', startIn: 'downloads' }); }
+    catch (e) { return; }
+    await db.setSetting('sync:libraryFolder', dir, { silent: true });
+    const t = toast('Looking for books…', { ms: 60000 });
+    files = await scanDir(dir);
+    t.close();
+  } else {
+    files = await pickFolderFallback();
+    if (!files) return;
+  }
+  showFound(files);
+}
+
+async function scanDir(dir, depth = 0, out = []) {
+  for await (const entry of dir.values()) {
+    if (out.length > 2000) break;
+    if (entry.kind === 'file' && /\.(epub|pdf)$/i.test(entry.name)) out.push(await entry.getFile());
+    else if (entry.kind === 'directory' && depth < 4 && !entry.name.startsWith('.')) await scanDir(entry, depth + 1, out);
+  }
+  return out;
+}
+
+function pickFolderFallback() {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    if ('webkitdirectory' in input && !/iPhone|iPad/.test(navigator.userAgent)) input.webkitdirectory = true;
+    else input.accept = BOOK_ACCEPT;
+    input.onchange = () => resolve([...input.files].filter(meta.isBookFile));
+    input.addEventListener('cancel', () => resolve(null));
+    input.click();
+  });
+}
+
+async function rescanFolder() {
+  const dir = await db.getSetting('sync:libraryFolder');
+  if (!dir || !dir.queryPermission) return;
+  try {
+    if (await dir.queryPermission({ mode: 'read' }) !== 'granted') return;
+    const known = knownFiles();
+    const fresh = (await scanDir(dir)).filter(f => !known.has(fileKey(f)));
+    if (fresh.length) toast(`${fresh.length} new book${fresh.length > 1 ? 's' : ''} found in your folder`, { action: 'Show', onAction: () => showFound(fresh), ms: 8000 });
+  } catch (e) { /* folder moved or permission revoked */ }
+}
+
+function showFound(files) {
+  const known = knownFiles();
+  const fresh = files.filter(f => !known.has(fileKey(f)));
+  if (!files.length) { toast('No EPUB or PDF files found there'); return; }
+  if (!fresh.length) { toast('All books there are already on your shelves'); return; }
+  fresh.sort((a, b) => a.name.localeCompare(b.name));
+  openSheet(`<div class="found"><h3>Found ${fresh.length} book${fresh.length > 1 ? 's' : ''}</h3>
+    <div class="found-tools"><label class="toggle small"><input type="checkbox" data-all checked><span>Select all</span></label>
+      <span class="muted small">Add to</span><div class="chips">${['tbr', 'reading', 'read'].map((s, i) => `<button class="chip ${i === 0 ? 'on' : ''}" data-to="${s}">${SHELF_LABEL[s]}</button>`).join('')}</div></div>
+    <div class="found-list">${fresh.map((f, i) => `<label class="found-row"><input type="checkbox" data-i="${i}" checked>
+      <span class="found-badge ${meta.isPdf(f) ? 'pdf' : ''}">${meta.isPdf(f) ? 'PDF' : 'EPUB'}</span>
+      <span class="found-name">${esc(f.name.replace(/\.(epub|pdf)$/i, ''))}</span><small>${(f.size / 1048576).toFixed(1)} MB</small></label>`).join('')}</div>
+    <div class="btn-row"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" data-add-found>Add selected</button></div></div>`, {
+    wide: true, className: 'tall',
+    onMount: (sheet, close) => {
+      let to = 'tbr';
+      sheet.addEventListener('click', e => {
+        const c = e.target.closest('[data-to]');
+        if (c) { to = c.dataset.to; $$('[data-to]', sheet).forEach(x => x.classList.toggle('on', x === c)); }
+      });
+      $('[data-all]', sheet).onchange = e => $$('[data-i]', sheet).forEach(x => { x.checked = e.target.checked; });
+      $('[data-add-found]', sheet).onclick = () => {
+        const chosen = $$('[data-i]', sheet).filter(x => x.checked).map(x => fresh[+x.dataset.i]);
+        close();
+        if (chosen.length) importFiles(chosen, to);
+      };
+    },
+  });
+}
+
+// ---------- shelf widget ----------
+// A web app can't place a live widget on the phone's home screen, so this is a compact
+// page showing just a few rows of one shelf that can be pinned as its own shortcut.
+
+function openWidgetSetup() {
+  let shelf = 'read', rows = 4;
+  const url = () => `${location.origin}${location.pathname}?widget=${shelf}&rows=${rows}`;
+  openSheet(`<div class="confirm widget-setup"><h3>Shelf widget</h3>
+    <p>A compact view of one shelf — just the rows you choose, no buttons. Open it and add it to your home screen to keep your shelf one tap away.</p>
+    <span class="label">Shelf</span><div class="chips">${SHELVES.map(s => `<button class="chip ${s.key === shelf ? 'on' : ''}" data-ws="${s.key}">${s.label}</button>`).join('')}</div>
+    <span class="label">Rows</span><div class="chips">${[3, 4].map(n => `<button class="chip ${n === rows ? 'on' : ''}" data-wr="${n}">${n} rows</button>`).join('')}</div>
+    <p class="muted small">Phones only allow real live home-screen widgets for apps from the Play Store or App Store. This view updates every time you open it.</p>
+    <div class="btn-row"><button class="btn ghost" data-close>Close</button><button class="btn primary" data-open-widget>${icon('open')} Open widget view</button></div></div>`, {
+    onMount: (sheet, close) => sheet.addEventListener('click', e => {
+      const s = e.target.closest('[data-ws]'), r = e.target.closest('[data-wr]');
+      if (s) { shelf = s.dataset.ws; $$('[data-ws]', sheet).forEach(x => x.classList.toggle('on', x === s)); }
+      if (r) { rows = +r.dataset.wr; $$('[data-wr]', sheet).forEach(x => x.classList.toggle('on', x === r)); }
+      if (e.target.closest('[data-open-widget]')) { close(); location.href = url(); }
+    }),
+  });
 }
 
 // ---------- cloud sync ----------

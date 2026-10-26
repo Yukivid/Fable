@@ -218,3 +218,48 @@ export async function fetchBlob(url) {
     return blob.type.startsWith('image/') ? blob : null;
   } catch (e) { return null; }
 }
+
+// ---- PDF ----
+
+export const isPdf = file => /\.pdf$/i.test(file.name || '') || file.type === 'application/pdf';
+export const isBookFile = file => /\.(epub|pdf)$/i.test(file.name || '') || ['application/pdf', 'application/epub+zip'].includes(file.type);
+
+export function pdfLib() {
+  const lib = window.pdfjsLib;
+  if (lib && !lib.GlobalWorkerOptions.workerSrc) lib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+  return lib;
+}
+
+export async function parsePdf(arrayBuffer, fileName = '') {
+  const pdf = await pdfLib().getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) }).promise;
+  let info = {};
+  try { info = (await pdf.getMetadata()).info || {}; } catch (e) { /* no metadata */ }
+  const fromName = fileName.replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').trim();
+  let title = cleanText(info.Title).replace(/^Microsoft Word - /i, '').replace(/\.(docx?|pdf)$/i, '');
+  if (!title || /^untitled$/i.test(title) || /[\/]/.test(title)) title = fromName || 'Untitled';
+
+  // The first page becomes the cover.
+  let coverBlob = null;
+  try {
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: 600 / base.width });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    coverBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+  } catch (e) { /* cover stays empty */ }
+
+  const result = {
+    title, author: cleanText(info.Author) || 'Unknown author',
+    description: cleanText(info.Subject), pages: pdf.numPages, coverBlob,
+  };
+  pdf.destroy();
+  return result;
+}
+
+export function parseBookFile(file, buf, onProgress) {
+  return isPdf(file) ? parsePdf(buf, file.name) : parseEpub(buf, onProgress);
+}

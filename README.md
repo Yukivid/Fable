@@ -1,6 +1,8 @@
 # Fable — cozy bookshelf & EPUB reader
 
-A virtual bookshelf (Read · Reading · TBR) with realistic candles, flowers and plants, plus a full EPUB reader.
+A virtual bookshelf (Read · Reading · TBR) with realistic candles, flowers and plants, plus a full EPUB and PDF reader.
+
+Live: https://yukivid.github.io/Fable/
 It is one codebase that works as a **website** and as an **installable app** (PWA) on Android, iPhone, Windows and Mac.
 Everything is stored on the device (IndexedDB); nothing is uploaded anywhere.
 

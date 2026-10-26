@@ -38,6 +38,7 @@ export async function openReader(opts) {
       <div class="r-title"><strong>${esc(opts.book.title)}</strong><span class="r-chapter"></span></div>
       <button class="icon-btn" data-r="toc" title="Contents">${icon('toc')}</button>
       <button class="icon-btn" data-r="notes" title="Highlights, notes & favourites">${icon('note')}</button>
+      <button class="icon-btn mark-btn" data-r="bookmark" title="Bookmark this page">${icon('bookmark')}</button>
       <button class="icon-btn fav-btn" data-r="fav" title="Favourite this page">${icon('heart')}</button>
       <button class="icon-btn" data-r="settings" title="Reading settings">${icon('type')}</button>
     </header>
@@ -54,6 +55,7 @@ export async function openReader(opts) {
       <button class="icon-btn" data-r="zoomIn" title="Zoom in">${icon('zoomIn')}</button>
     </footer>
     <div class="r-sel">
+      <span class="sel-label">${icon('highlight')} Highlight</span>
       ${Object.entries(HL_COLORS).map(([k, c]) => `<button class="hl-dot" data-hl="${k}" style="background:${c}" aria-label="Highlight ${k}"></button>`).join('')}
       <span class="sep"></span>
       <button class="icon-btn" data-r="addnote" title="Add note">${icon('note')}</button>
@@ -90,14 +92,19 @@ export async function openReader(opts) {
 async function createRendition(target) {
   if (R.rendition) R.rendition.destroy();
   R.view.innerHTML = '';
-  const scrolled = R.prefs.flow === 'scrolled';
-  R.el.classList.toggle('scrolled', scrolled);
-  const rendition = R.book.renderTo(R.view, scrolled
+  const flow = R.prefs.flow;
+  R.el.classList.toggle('scrolled', flow !== 'paginated');
+  R.el.classList.toggle('chapter', flow === 'chapter');
+  const rendition = R.book.renderTo(R.view, flow === 'scrolled'
     ? { width: '100%', height: '100%', flow: 'scrolled', manager: 'continuous' }
-    : { width: '100%', height: '100%', flow: 'paginated', spread: R.prefs.spread === 'single' ? 'none' : 'auto', minSpreadWidth: 900 });
+    : flow === 'chapter'
+      // One whole chapter scrolls top to bottom; swipe or arrows move between chapters.
+      ? { width: '100%', height: '100%', flow: 'scrolled-doc' }
+      : { width: '100%', height: '100%', flow: 'paginated', spread: R.prefs.spread === 'single' ? 'none' : 'auto', minSpreadWidth: 900 });
   R.rendition = rendition;
   rendition.hooks.content.register(contents => styleContents(contents));
   rendition.on('relocated', onRelocated);
+  rendition.on('rendered', section => { R.sectionIndex = section.index; });
   rendition.on('selected', onSelected);
   rendition.on('click', onContentClick);
   rendition.on('keyup', onKey);
@@ -172,11 +179,23 @@ function applyChrome() {
 
 // ---------- navigation ----------
 
-function next() { R.navigated = true; turn('next'); R.rendition.next(); }
-function prev() { R.navigated = true; turn('prev'); R.rendition.prev(); }
+function next() { R.navigated = true; if (R.prefs.flow === 'chapter') return chapterStep(1); turn('next'); R.rendition.next(); }
+function prev() { R.navigated = true; if (R.prefs.flow === 'chapter') return chapterStep(-1); turn('prev'); R.rendition.prev(); }
+
+function chapterStep(d) {
+  const current = R.sectionIndex ?? (R.loc && R.loc.start.index);
+  if (current == null) return;
+  const section = R.book.spine.get(current + d);
+  if (!section) {
+    if (d > 0 && !R.finished) finish();
+    return;
+  }
+  turn(d > 0 ? 'next' : 'prev');
+  R.rendition.display(section.href);
+}
 
 function turn(dir) {
-  if (R.prefs.flow !== 'paginated') return;
+  if (R.prefs.flow === 'scrolled') return;
   const v = R.view;
   v.classList.remove('turn-next', 'turn-prev');
   void v.offsetWidth;
@@ -196,7 +215,7 @@ function onRelocated(loc) {
   if (!input.matches(':active')) input.value = Math.round(pct * 1000);
   $('.r-page', R.el).textContent = pages ? `p. ${page} of ${pages} · ${Math.round(pct * 100)}%` : `${Math.round(pct * 100)}%`;
   $('.r-chapter', R.el).textContent = chapterTitle(loc.start.href);
-  updateFav();
+  updateMarks();
 
   rec.lastCfi = cfi;
   rec.progress = Math.max(0, Math.min(0.999, pct));
@@ -284,7 +303,7 @@ function onTouchEnd(e) {
   const dx = t.screenX - touch.x, dy = t.screenY - touch.y;
   const quick = Date.now() - touch.t < 600;
   touch = null;
-  if (R.prefs.flow !== 'paginated' || !quick) return;
+  if (R.prefs.flow === 'scrolled' || !quick) return;
   if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3) {
     const sel = R.rendition.getContents()[0]?.window.getSelection();
     if (sel && sel.toString()) return;
@@ -327,7 +346,8 @@ async function onReaderClick(e) {
   if (a === 'zoomOut') zoom(-10);
   if (a === 'toc') openToc();
   if (a === 'notes') openNotes();
-  if (a === 'fav') toggleFav();
+  if (a === 'fav') toggleMark('fav');
+  if (a === 'bookmark') toggleMark('bookmark');
   if (a === 'settings') openSettings();
   if (a === 'addnote') addNote();
   if (a === 'copy') { navigator.clipboard && navigator.clipboard.writeText(R.sel?.text || ''); toast('Copied'); clearSelection(); }
@@ -409,33 +429,37 @@ function openAnnotation(a) {
   });
 }
 
-// ---------- favourite pages ----------
+// ---------- bookmarks & favourite pages ----------
 
-function favHere() {
+function markHere(type) {
   if (!R.loc) return null;
   const { start, end } = R.loc;
   const cmp = new ePub.CFI();
-  return R.anns.find(a => a.type === 'fav' && (a.cfi === start.cfi ||
+  return R.anns.find(a => a.type === type && (a.cfi === start.cfi ||
     (cmp.compare(a.cfi, start.cfi) >= 0 && cmp.compare(a.cfi, end.cfi) <= 0)));
 }
 
-function updateFav() { $('.fav-btn', R.el).classList.toggle('on', !!favHere()); }
+function updateMarks() {
+  $('.fav-btn', R.el).classList.toggle('on', !!markHere('fav'));
+  $('.mark-btn', R.el).classList.toggle('on', !!markHere('bookmark'));
+}
 
-async function toggleFav() {
-  const existing = favHere();
+async function toggleMark(type) {
+  const label = type === 'fav' ? 'favourite pages' : 'bookmarks';
+  const existing = markHere(type);
   if (existing) {
     R.anns = R.anns.filter(a => a !== existing);
     await db.del('annotations', existing.id);
-    toast('Removed from favourite pages');
+    toast(`Removed from ${label}`);
   } else {
     let text = '';
     try { text = R.rendition.getContents()[0].document.body.textContent.replace(/\s+/g, ' ').trim().slice(0, 140); } catch (e) { /* ignore */ }
-    const a = { id: uid('a_'), bookId: R.bookRecord().id, type: 'fav', cfi: R.loc.start.cfi, text, chapter: $('.r-chapter', R.el).textContent, page: R.bookRecord().lastPageLabel, createdAt: Date.now() };
+    const a = { id: uid('a_'), bookId: R.bookRecord().id, type, cfi: R.loc.start.cfi, text, chapter: $('.r-chapter', R.el).textContent, page: R.bookRecord().lastPageLabel, createdAt: Date.now() };
     R.anns.push(a);
     await db.put('annotations', a);
-    toast('Page added to favourites ♥');
+    toast(type === 'fav' ? 'Page added to favourites ♥' : 'Bookmark added');
   }
-  updateFav();
+  updateMarks();
 }
 
 // ---------- panels ----------
@@ -459,6 +483,12 @@ function openToc() {
 function openNotes() {
   const hls = R.anns.filter(a => a.type === 'highlight').sort((a, b) => new ePub.CFI().compare(a.cfi, b.cfi));
   const favs = R.anns.filter(a => a.type === 'fav').sort((a, b) => new ePub.CFI().compare(a.cfi, b.cfi));
+  const marks = R.anns.filter(a => a.type === 'bookmark').sort((a, b) => new ePub.CFI().compare(a.cfi, b.cfi));
+  const markHtml = marks.length ? marks.map(a => `<div class="ann" data-go="${esc(a.cfi)}">
+      <strong class="fav-title mark">${icon('bookmark')} ${esc(a.page || a.chapter || 'Bookmark')}</strong>
+      <p class="muted small">${esc(a.chapter || '')}${a.text ? ' — “' + esc(a.text) + '…”' : ''}</p>
+      <button class="icon-btn ann-del" data-del="${a.id}" aria-label="Delete">${icon('trash')}</button></div>`).join('')
+    : '<p class="muted">Tap the bookmark at the top while reading to bookmark a page.</p>';
   const hlHtml = hls.length ? hls.map(a => `<div class="ann" data-go="${esc(a.cfi)}">
       <blockquote style="--hl:${HL_COLORS[a.color] || HL_COLORS.yellow}">${esc(a.text)}</blockquote>
       ${a.note ? `<p class="ann-note">${esc(a.note)}</p>` : ''}<span class="muted small">${esc(a.chapter || '')}</span>
@@ -469,8 +499,8 @@ function openNotes() {
       <p class="muted small">${esc(a.chapter || '')}${a.text ? ' — “' + esc(a.text) + '…”' : ''}</p>
       <button class="icon-btn ann-del" data-del="${a.id}" aria-label="Delete">${icon('trash')}</button></div>`).join('')
     : '<p class="muted">Tap the heart at the top while reading to save a favourite page.</p>';
-  openSheet(`<div class="notes"><div class="seg"><button class="on" data-tab="h">Highlights & notes (${hls.length})</button><button data-tab="f">Favourite pages (${favs.length})</button></div>
-    <div class="pane" data-pane="h">${hlHtml}</div><div class="pane" data-pane="f" hidden>${favHtml}</div></div>`, {
+  openSheet(`<div class="notes"><div class="seg"><button class="on" data-tab="h">Highlights (${hls.length})</button><button data-tab="b">Bookmarks (${marks.length})</button><button data-tab="f">Favourites (${favs.length})</button></div>
+    <div class="pane" data-pane="h">${hlHtml}</div><div class="pane" data-pane="b" hidden>${markHtml}</div><div class="pane" data-pane="f" hidden>${favHtml}</div></div>`, {
     className: 'tall',
     onMount: (sheet, close) => sheet.addEventListener('click', async e => {
       const tab = e.target.closest('[data-tab]');
@@ -486,7 +516,7 @@ function openNotes() {
         R.anns = R.anns.filter(x => x !== a);
         await db.del('annotations', a.id);
         del.closest('.ann').remove();
-        updateFav();
+        updateMarks();
         return;
       }
       const go = e.target.closest('[data-go]');
@@ -519,7 +549,8 @@ function openSettings() {
     <input type="range" min="0" max="1" step="0.01" value="${p.warmth}" data-range="warmth">
     <span class="label">Page view</span>
     <div class="chips"><button class="chip ${p.flow === 'paginated' ? 'on' : ''}" data-flow="paginated">⇆ Flip left / right</button>
-      <button class="chip ${p.flow === 'scrolled' ? 'on' : ''}" data-flow="scrolled">⇅ Scroll up / down</button></div>
+      <button class="chip ${p.flow === 'scrolled' ? 'on' : ''}" data-flow="scrolled">⇅ Scroll up / down</button>
+      <button class="chip ${p.flow === 'chapter' ? 'on' : ''}" data-flow="chapter">▤ Scroll a chapter, flip to the next</button></div>
     <div class="chips"><button class="chip ${p.spread !== 'single' ? 'on' : ''}" data-spread="auto">Two pages on wide screens</button>
       <button class="chip ${p.spread === 'single' ? 'on' : ''}" data-spread="single">Always one page</button></div>
     <label class="toggle"><input type="checkbox" data-toggle="justify" ${p.justify ? 'checked' : ''}><span>Justify text</span></label>

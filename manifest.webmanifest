@@ -16,6 +16,6 @@
     { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
   ],
   "file_handlers": [
-    { "action": "./", "accept": { "application/epub+zip": [".epub"] } }
+    { "action": "./", "accept": { "application/epub+zip": [".epub"], "application/pdf": [".pdf"] } }
   ]
 }

@@ -1,9 +1,9 @@
 // Offline support: app shell is cached up front, fonts and covers are cached as they are used.
-const VERSION = 'fable-v3';
+const VERSION = 'fable-v4';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/styles.css',
-  './js/app.js', './js/db.js', './js/meta.js', './js/decor.js', './js/ui.js', './js/reader.js', './js/ambience.js', './js/sync.js', './js/config.js',
-  './vendor/epub.min.js', './vendor/jszip.min.js', './vendor/supabase.min.js', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
+  './js/app.js', './js/db.js', './js/meta.js', './js/decor.js', './js/ui.js', './js/reader.js', './js/ambience.js', './js/sync.js', './js/config.js', './js/pdfreader.js',
+  './vendor/epub.min.js', './vendor/jszip.min.js', './vendor/supabase.min.js', './vendor/pdf.min.js', './vendor/pdf.worker.min.js', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
 ];
 
 self.addEventListener('install', e => {

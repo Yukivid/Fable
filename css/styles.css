@@ -8,7 +8,9 @@
   --sheet: #1d1c21; --sheet-2: #29272e; --sheet-ink: #f2ede5; --muted: #a39e96;
   --accent: #f2b35e; --accent-ink: #2a1c0c; --danger: #e4606d;
   --serif: 'Fraunces', 'Iowan Old Style', Georgia, serif;
-  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Rokkitt', 'Rockwell', Georgia, serif;
+  --ui-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --logo: 'Righteous', 'Rokkitt', system-ui, sans-serif;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   color-scheme: dark;
@@ -35,7 +37,7 @@ body.paused * { animation-play-state: paused !important; }
   display: flex; align-items: center; justify-content: space-between;
   padding: calc(10px + var(--safe-t)) 16px 6px; gap: 8px;
 }
-.brand { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 24px; font-weight: 600; letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.25); }
+.brand { display: flex; align-items: center; gap: 8px; font-family: var(--logo); font-size: 26px; font-weight: 400; letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.25); }
 .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(160deg, #ffcf7d, #e98b3a); color: #4a220a; box-shadow: 0 4px 16px rgba(240, 150, 60, .45); }
 .brand-mark .ic { width: 20px; height: 20px; fill: #fff3d6; stroke: #7a3a10; stroke-width: 1.2; }
 .top-actions { display: flex; gap: 4px; }
@@ -189,7 +191,7 @@ body.light-wall .glow { mix-blend-mode: soft-light; }
 .v2 .band { height: calc(var(--u) * 4); background: linear-gradient(180deg, #f6dc94, #b0822e); opacity: .85; }
 .v3 .band { display: none; }
 .f-serif .sp-title { font-family: 'Cormorant Garamond', var(--serif); font-size: calc(var(--fs) * 1.05); }
-.f-sans .sp-title { font-family: var(--sans); text-transform: uppercase; font-size: calc(var(--fs) * .82); letter-spacing: .12em; }
+.f-sans .sp-title { font-family: var(--ui-sans); text-transform: uppercase; font-size: calc(var(--fs) * .82); letter-spacing: .12em; }
 .f-display .sp-title { font-family: 'Cinzel', var(--serif); font-size: calc(var(--fs) * .86); letter-spacing: .08em; }
 
 /* ---------- decor ---------- */
@@ -496,3 +498,77 @@ body.arranging .toasts { bottom: calc(190px + var(--safe-b)); }
   .page { padding-left: 10px; padding-right: 10px; }
   .case { border-radius: 24px; padding: 12px 10px 22px; }
 }
+
+/* ---------- greeting, welcome ---------- */
+body { font-size: 16px; }
+.greeting { margin: -2px 20px 0; text-align: center; font-family: var(--sans); font-size: 17px; font-weight: 500; letter-spacing: .01em; color: var(--ui-ink); opacity: .92; text-shadow: 0 1px 10px rgba(0,0,0,.3); min-height: 1.2em; }
+.greeting:empty { display: none; }
+.welcome { text-align: center; }
+.welcome .btn-row { justify-content: center; }
+.welcome input { text-align: center; font-size: 17px; margin-top: 8px; }
+.welcome-mark { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; margin-top: 8px; background: linear-gradient(160deg, #ffcf7d, #e98b3a); box-shadow: 0 8px 26px rgba(240,150,60,.45); }
+.welcome-mark .ic { width: 30px; height: 30px; fill: #fff3d6; stroke: #7a3a10; stroke-width: 1.2; }
+.welcome h3 { font-family: var(--logo); font-weight: 400; font-size: 26px; }
+
+/* ---------- wood panel wall ---------- */
+body.wood-wall .case {
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(255,230,190,.10), transparent 60%),
+    radial-gradient(100% 100% at 50% 120%, rgba(0,0,0,.40), transparent 60%),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.42) 0 1.5px, rgba(255,255,255,.06) 1.5px 2.5px, transparent 2.5px 96px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.05) 0 7px, transparent 7px 19px, rgba(255,255,255,.04) 19px 23px, transparent 23px 41px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='600'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.25 .004' numOctaves='4' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='96' height='600' filter='url(%23g)'/%3E%3C/svg%3E"),
+    var(--wall);
+  background-size: auto, auto, auto, auto, 96px 600px, auto;
+}
+
+/* ---------- found books ---------- */
+.found-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.found-tools .toggle { margin: 0 auto 0 0; }
+.found-list { display: flex; flex-direction: column; gap: 4px; }
+.found-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--sheet-2); cursor: pointer; }
+.found-row input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.found-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.found-row small { color: var(--muted); }
+.found-badge { flex: none; font: 700 10px/1 var(--ui-sans); letter-spacing: .06em; padding: 4px 6px; border-radius: 6px; background: rgba(120, 180, 255, .18); color: #9cc8ff; }
+.found-badge.pdf { background: rgba(255, 110, 110, .18); color: #ff9c9c; }
+
+/* ---------- widget view ---------- */
+body.widget-mode .topbar, body.widget-mode .tabs, body.widget-mode .fab, body.widget-mode .continue-slot,
+body.widget-mode .hint, body.widget-mode .greeting, body.widget-mode .arrange-bar { display: none !important; }
+body.widget-mode .pages { overflow: hidden; }
+body.widget-mode .page { overflow: hidden; padding: 12px; display: flex; align-items: center; }
+body.widget-mode .page-inner { width: 100%; }
+body.widget-mode .case { cursor: pointer; }
+
+/* ---------- reader extras ---------- */
+.mark-btn.on { color: var(--accent); } .mark-btn.on .ic { fill: var(--accent); }
+.fav-title.mark .ic { color: var(--accent); fill: var(--accent); }
+.sel-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 0 6px 0 4px; color: #f2ede5; }
+.sel-label .ic { width: 18px; height: 18px; }
+.seg button { font-size: 12.5px; padding: 9px 4px; }
+@media (max-width: 420px) { .sel-label { display: none; } }
+.toc-item small { font-weight: 400; }
+
+/* ---------- PDF reader ---------- */
+.pdf-stage { left: 0 !important; right: 0 !important; }
+.pdf-view { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.pdf-view.single { display: flex; padding: 8px; }
+.pdf-view.single .pdf-page { margin: auto; }
+.pdf-view.list { padding: 8px 0 40px; }
+.pdf-view.list .pdf-page { margin: 0 auto 12px; }
+.pdf-view.turn-next { animation: turnNext .34s ease-out; }
+.pdf-view.turn-prev { animation: turnPrev .34s ease-out; }
+.pdf-page { position: relative; background: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.25); flex: none; }
+.pdf-reader.dark .pdf-page { background: #111; }
+.pdf-page canvas { display: block; filter: var(--pdf-filter); }
+.hl-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.hl-layer i { position: absolute; border-radius: 2px; opacity: .42; mix-blend-mode: multiply; }
+.pdf-reader.dark .hl-layer i { mix-blend-mode: screen; opacity: .35; }
+.hl-layer i.has-note { box-shadow: inset 0 -2px 0 rgba(0,0,0,.45); }
+.textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; z-index: 2; text-size-adjust: none; -webkit-text-size-adjust: none; forced-color-adjust: none; }
+.textLayer span, .textLayer br { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+.textLayer ::selection { background: rgba(255, 196, 0, .4); color: transparent; }
+.textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: -1; cursor: default; user-select: none; }
+.pdf-reader.zoomed .r-edge { display: none; }
+.pdf-reader { --margin: 0px; }
