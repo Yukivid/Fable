@@ -155,7 +155,7 @@ async function saveBook(b) {
 function buildChrome() {
   $('#app').innerHTML = `
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">${icon('flame')}</span><span>Nook</span></div>
+    <div class="brand"><span class="brand-mark">${icon('flame')}</span><span>Fable</span></div>
     <div class="top-actions">
       <button class="icon-btn" data-act="search" title="Find books online">${icon('search')}</button>
       <button class="icon-btn" data-act="view" title="Covers or spines">${icon('spines')}</button>
@@ -1082,9 +1082,9 @@ function openMenu() {
     <button data-m="library">${icon('library')}<span>Library<small>${off} book${off === 1 ? '' : 's'} off the shelves</small></span></button>
     <button data-m="export">${icon('download')}<span>Back up library<small>Books, EPUBs, notes & layout in one .zip</small></span></button>
     <button data-m="import">${icon('upload')}<span>Restore from backup</span></button>
-    ${S.installEvent ? `<button data-m="install">${icon('install')}<span>Install Nook as an app</span></button>` : ''}
+    ${S.installEvent ? `<button data-m="install">${icon('install')}<span>Install Fable as an app</span></button>` : ''}
     <button data-m="cloud">${icon('globe')}<span>Cloud sync<small>${cloudLine()}</small></span></button>
-    <button data-m="about">${icon('flame')}<span>About Nook<small>${currentUser() ? 'Synced to your account' : 'Everything stays on this device'}</small></span></button>
+    <button data-m="about">${icon('flame')}<span>About Fable<small>${currentUser() ? 'Synced to your account' : 'Everything stays on this device'}</small></span></button>
   </div>`, {
     onMount: (sheet, close) => sheet.addEventListener('click', async e => {
       const m = e.target.closest('[data-m]')?.dataset.m;
@@ -1095,7 +1095,7 @@ function openMenu() {
       if (m === 'export') exportBackup();
       if (m === 'import') importBackup();
       if (m === 'install') { S.installEvent.prompt(); S.installEvent = null; }
-      if (m === 'about') openSheet(`<div class="confirm"><h3>Nook</h3><p>A cozy bookshelf and EPUB reader. Your books, highlights and notes are stored only in this browser on this device. Use Back up library to keep a copy or move to another device.</p><div class="btn-row"><button class="btn primary" data-close>Lovely</button></div></div>`);
+      if (m === 'about') openSheet(`<div class="confirm"><h3>Fable</h3><p>A cozy bookshelf and EPUB reader. Your books, highlights and notes are stored only in this browser on this device. Use Back up library to keep a copy or move to another device.</p><div class="btn-row"><button class="btn primary" data-close>Lovely</button></div></div>`);
     }),
   });
 }
@@ -1141,7 +1141,7 @@ async function exportBackup() {
     const blob = await zip.generateAsync({ type: 'blob' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `nook-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+    a.download = `fable-backup-${new Date().toISOString().slice(0, 10)}.zip`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     t.update('Backup saved'); setTimeout(t.close, 2000);
@@ -1185,7 +1185,7 @@ function cloudLine() {
 
 function openCloud() {
   if (!cloudConfigured()) {
-    openSheet(`<div class="confirm"><h3>Cloud sync</h3><p>Cloud sync isn't connected for this copy of Nook yet. Your books are saved on this device; use Back up library to keep a copy.</p><div class="btn-row"><button class="btn primary" data-close>OK</button></div></div>`);
+    openSheet(`<div class="confirm"><h3>Cloud sync</h3><p>Cloud sync isn't connected for this copy of Fable yet. Your books are saved on this device; use Back up library to keep a copy.</p><div class="btn-row"><button class="btn primary" data-close>OK</button></div></div>`);
     return;
   }
   const u = currentUser();

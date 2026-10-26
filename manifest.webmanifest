@@ -1,6 +1,6 @@
 {
-  "name": "Nook — cozy bookshelf",
-  "short_name": "Nook",
+  "name": "Fable — cozy bookshelf",
+  "short_name": "Fable",
   "description": "A customizable virtual bookshelf and EPUB reader.",
   "start_url": "./",
   "scope": "./",

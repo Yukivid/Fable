@@ -1,4 +1,4 @@
-# Nook — cozy bookshelf & EPUB reader
+# Fable — cozy bookshelf & EPUB reader
 
 A virtual bookshelf (Read · Reading · TBR) with realistic candles, flowers and plants, plus a full EPUB reader.
 It is one codebase that works as a **website** and as an **installable app** (PWA) on Android, iPhone, Windows and Mac.
@@ -15,7 +15,7 @@ Open http://localhost:5173. (It must be served over http(s), not opened as a fil
 ## Install as an app
 
 - **Phone:** host the folder anywhere with HTTPS (GitHub Pages, Netlify, Cloudflare Pages — all free), open it in Chrome / Safari, then "Add to Home screen" / "Install app".
-- **Desktop Chrome/Edge:** click the install icon in the address bar, or ⋮ menu → Install Nook. The installed app can open `.epub` files directly.
+- **Desktop Chrome/Edge:** click the install icon in the address bar, or ⋮ menu → Install Fable. The installed app can open `.epub` files directly.
 - Works offline after the first visit (except online book search).
 
 ## Features

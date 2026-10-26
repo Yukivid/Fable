@@ -1,4 +1,4 @@
--- Nook cloud database. Run once in Supabase: SQL Editor → New query → paste → Run.
+-- Fable cloud database. Run once in Supabase: SQL Editor → New query → paste → Run.
 -- Each user can only ever see and change their own rows and files.
 
 create table if not exists public.books (
