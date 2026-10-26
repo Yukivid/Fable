@@ -1,6 +1,6 @@
 // Reading mode: epub.js rendition with themes, fonts, flip/scroll, highlights, notes and favourite pages.
 import { db, uid } from './db.js';
-import { icon, esc, $, $$, openSheet, toast, promptSheet, stars, closeAllSheets, sheetOpen, closeSheet } from './ui.js';
+import { icon, esc, $, $$, openSheet, toast, promptSheet, stars, closeAllSheets, sheetOpen, closeSheet, stepper, stepValue, placeBelow } from './ui.js';
 
 const PAGE_THEMES = {
   paper: { name: 'Paper', bg: '#fbf7ef', fg: '#2b2520', link: '#8a4b2a' },
@@ -368,6 +368,12 @@ function onSelected(cfiRange, contents) {
   R.sel = { cfi: cfiRange, text, contents };
   R.el.classList.add('selecting');
   R.el.classList.remove('chrome');
+  try {
+    const sel = contents.window.getSelection();
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    const f = contents.window.frameElement.getBoundingClientRect();
+    placeBelow($('.r-sel', R.el), { left: f.left + r.left, right: f.left + r.right, top: f.top + r.top, bottom: f.top + r.bottom, width: r.width });
+  } catch (e) { /* keep last position */ }
 }
 
 function clearSelection() {
@@ -525,79 +531,84 @@ function openNotes() {
   });
 }
 
+const STEPS = {
+  size:       { label: 'Text size',    step: 10,  min: 60,  max: 240, fmt: v => `${v}%` },
+  lineHeight: { label: 'Line spacing', step: 0.1, min: 1.1, max: 2.4, fmt: v => v.toFixed(1) },
+  margin:     { label: 'Margin',       step: 0.5, min: 0,   max: 3,   fmt: v => `${Math.round(v * 6)}%` },
+  brightness: { label: 'Brightness',   step: 0.1, min: 0.3, max: 1,   fmt: v => `${Math.round(v * 100)}%` },
+  warmth:     { label: 'Warmth',       step: 0.1, min: 0,   max: 1,   fmt: v => v ? `${Math.round(v * 100)}%` : 'Off' },
+};
+
 function openSettings() {
   const p = R.prefs;
+  const views = [['paginated', 'paged', 'Paged'], ['scrolled', 'scrolled', 'Scrolled'], ['chapter', 'chapterView', 'Chapter']];
   openSheet(`<div class="r-settings">
-    <span class="label">Page colour</span>
-    <div class="page-themes">${Object.entries(PAGE_THEMES).map(([k, t]) => k === 'custom'
-      ? `<button class="pt ${p.theme === k ? 'on' : ''}" data-theme="custom" style="background:conic-gradient(#f6c,#fc6,#6cf,#9f9,#f6c);color:#222">Aa<span>Custom</span></button>`
-      : `<button class="pt ${p.theme === k ? 'on' : ''}" data-theme="${k}" style="background:${t.bg};color:${t.fg}">Aa<span>${t.name}</span></button>`).join('')}</div>
-    <div class="custom-colors" ${p.theme === 'custom' ? '' : 'hidden'}>
-      <label>Page <input type="color" data-color="bg" value="${p.bg}"></label>
-      <label>Text <input type="color" data-color="fg" value="${p.fg}"></label></div>
-    <span class="label">Font</span>
-    <div class="chips">${Object.entries(FONTS).map(([k, f]) => `<button class="chip ${p.font === k ? 'on' : ''}" data-font="${k}" style="font-family:${f.css || 'inherit'}">${f.name}</button>`).join('')}</div>
-    <span class="label">Text size <small class="muted" data-out="size">${p.size}%</small></span>
-    <div class="size-row"><button class="btn small ghost" data-size="-10">A−</button><input type="range" min="60" max="240" step="5" value="${p.size}" data-range="size"><button class="btn small ghost" data-size="10">A+</button></div>
-    <span class="label">Line spacing</span>
-    <input type="range" min="1.1" max="2.2" step="0.05" value="${p.lineHeight}" data-range="lineHeight">
-    <span class="label">Margins</span>
-    <input type="range" min="0" max="3" step="0.25" value="${p.margin}" data-range="margin">
-    <span class="label">Brightness</span>
-    <div class="vol-row">${icon('sun')}<input type="range" min="0.25" max="1" step="0.01" value="${p.brightness}" data-range="brightness"></div>
-    <span class="label">Warmth <small class="muted">— easier on the eyes at night</small></span>
-    <input type="range" min="0" max="1" step="0.01" value="${p.warmth}" data-range="warmth">
-    <span class="label">Page view</span>
-    <div class="chips"><button class="chip ${p.flow === 'paginated' ? 'on' : ''}" data-flow="paginated">⇆ Flip left / right</button>
-      <button class="chip ${p.flow === 'scrolled' ? 'on' : ''}" data-flow="scrolled">⇅ Scroll up / down</button>
-      <button class="chip ${p.flow === 'chapter' ? 'on' : ''}" data-flow="chapter">▤ Scroll a chapter, flip to the next</button></div>
-    <div class="chips"><button class="chip ${p.spread !== 'single' ? 'on' : ''}" data-spread="auto">Two pages on wide screens</button>
-      <button class="chip ${p.spread === 'single' ? 'on' : ''}" data-spread="single">Always one page</button></div>
-    <label class="toggle"><input type="checkbox" data-toggle="justify" ${p.justify ? 'checked' : ''}><span>Justify text</span></label>
+    <div class="view-modes">${views.map(([k, ic, n]) => `<button class="vm ${p.flow === k ? 'on' : ''}" data-flow="${k}">${icon(ic)}<span>${n}</span></button>`).join('')}</div>
+    <p class="vm-hint muted small">${p.flow === 'chapter' ? 'Scroll through a chapter, swipe sideways for the next one.' : ''}</p>
+    <div class="set-block">
+      <span class="set-title">Theme</span>
+      <div class="theme-dots">${Object.entries(PAGE_THEMES).map(([k, t]) => k === 'custom'
+        ? `<button class="tdot custom ${p.theme === k ? 'on' : ''}" data-theme="custom" title="Custom">•••</button>`
+        : `<button class="tdot ${p.theme === k ? 'on' : ''}" data-theme="${k}" title="${t.name}" style="background:${t.bg};color:${t.fg}">${icon('check')}</button>`).join('')}</div>
+      <div class="custom-colors" ${p.theme === 'custom' ? '' : 'hidden'}>
+        <label>Page <input type="color" data-color="bg" value="${p.bg}"></label>
+        <label>Text <input type="color" data-color="fg" value="${p.fg}"></label></div>
+    </div>
+    <div class="set-block steps">
+      ${['size', 'lineHeight', 'margin'].map(k => stepper(k, STEPS[k].label, STEPS[k].fmt(p[k]))).join('')}
+      <div class="step-row"><div class="step-text"><span>Text align</span><small data-out="align">${p.justify ? 'Justify' : 'Left'}</small></div>
+        <button class="step-btn ${p.justify ? '' : 'on'}" data-align="left" aria-label="Align left">${icon('alignLeft')}</button>
+        <button class="step-btn ${p.justify ? 'on' : ''}" data-align="justify" aria-label="Justify">${icon('alignJustify')}</button></div>
+      <label class="font-row"><span>Font</span><select data-font>${Object.entries(FONTS).map(([k, f]) => `<option value="${k}" ${p.font === k ? 'selected' : ''}>${f.name === 'Original' ? 'Original font' : f.name}</option>`).join('')}</select></label>
+    </div>
+    <div class="set-block steps">
+      ${['brightness', 'warmth'].map(k => stepper(k, STEPS[k].label, STEPS[k].fmt(p[k]))).join('')}
+    </div>
+    <label class="toggle small-toggle"><input type="checkbox" data-toggle="spread" ${p.spread !== 'single' ? 'checked' : ''}><span>Two pages side by side on wide screens</span></label>
   </div>`, {
     className: 'reader-settings',
     onMount: (sheet) => {
       sheet.addEventListener('click', async e => {
         const t = e.target.closest('button');
         if (!t) return;
+        const key = t.dataset.inc || t.dataset.dec;
+        if (key) {
+          const cfg = STEPS[key];
+          p[key] = stepValue(cfg, p[key], t.dataset.inc ? 1 : -1);
+          $(`[data-out="${key}"]`, sheet).textContent = cfg.fmt(p[key]);
+          if (key === 'brightness' || key === 'warmth') { applyChrome(); R.savePrefs(p); }
+          else if (key === 'margin') { applyChrome(); setTimeout(() => { R.rendition.resize(); restyle(); }, 320); }
+          else restyle();
+          return;
+        }
+        if (t.dataset.align) {
+          p.justify = t.dataset.align === 'justify';
+          $$('[data-align]', sheet).forEach(b => b.classList.toggle('on', b === t));
+          $('[data-out="align"]', sheet).textContent = p.justify ? 'Justify' : 'Left';
+          restyle();
+        }
         if (t.dataset.theme) {
           p.theme = t.dataset.theme;
           $$('[data-theme]', sheet).forEach(b => b.classList.toggle('on', b === t));
           $('.custom-colors', sheet).hidden = p.theme !== 'custom';
           restyle(); R.anns.filter(a => a.type === 'highlight').forEach(drawHighlight);
         }
-        if (t.dataset.font) { p.font = t.dataset.font; $$('[data-font]', sheet).forEach(b => b.classList.toggle('on', b === t)); restyle(); }
-        if (t.dataset.size) {
-          p.size = Math.max(60, Math.min(240, p.size + +t.dataset.size));
-          $('[data-range=size]', sheet).value = p.size; $('[data-out=size]', sheet).textContent = p.size + '%';
-          restyle();
-        }
         if (t.dataset.flow && t.dataset.flow !== p.flow) {
           p.flow = t.dataset.flow;
           $$('[data-flow]', sheet).forEach(b => b.classList.toggle('on', b === t));
+          $('.vm-hint', sheet).textContent = p.flow === 'chapter' ? 'Scroll through a chapter, swipe sideways for the next one.' : '';
           R.savePrefs(p);
           await createRendition(R.loc && R.loc.start.cfi);
         }
-        if (t.dataset.spread) {
-          p.spread = t.dataset.spread;
-          $$('[data-spread]', sheet).forEach(b => b.classList.toggle('on', b === t));
+      });
+      sheet.addEventListener('change', async e => {
+        if (e.target.matches('[data-font]')) { p.font = e.target.value; restyle(); }
+        if (e.target.dataset.color) { p[e.target.dataset.color] = e.target.value; restyle(); }
+        if (e.target.dataset.toggle === 'spread') {
+          p.spread = e.target.checked ? 'auto' : 'single';
           R.savePrefs(p);
           if (p.flow === 'paginated') await createRendition(R.loc && R.loc.start.cfi);
         }
-      });
-      sheet.addEventListener('input', e => {
-        const r = e.target.dataset.range, c = e.target.dataset.color;
-        if (c) { p[c] = e.target.value; restyle(); return; }
-        if (!r) return;
-        p[r] = parseFloat(e.target.value);
-        if (r === 'size') $('[data-out=size]', sheet).textContent = p.size + '%';
-        if (r === 'brightness' || r === 'warmth' || r === 'margin') { applyChrome(); R.savePrefs(p); }
-      });
-      sheet.addEventListener('change', e => {
-        const r = e.target.dataset.range, tg = e.target.dataset.toggle;
-        if (tg) p[tg] = e.target.checked;
-        if (tg || ['size', 'lineHeight'].includes(r)) restyle();
-        if (r === 'margin') { R.rendition.resize(); restyle(); }
       });
     },
   });

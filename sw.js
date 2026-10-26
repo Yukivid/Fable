@@ -1,5 +1,5 @@
 // Offline support: app shell is cached up front, fonts and covers are cached as they are used.
-const VERSION = 'fable-v4';
+const VERSION = 'fable-v5';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/styles.css',
   './js/app.js', './js/db.js', './js/meta.js', './js/decor.js', './js/ui.js', './js/reader.js', './js/ambience.js', './js/sync.js', './js/config.js', './js/pdfreader.js',

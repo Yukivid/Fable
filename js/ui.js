@@ -35,6 +35,11 @@ const ICONS = {
   install: '<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M12 8v7M9 12l3 3 3-3"/>',
   left: '<path d="M15 5l-7 7 7 7"/>',
   right: '<path d="M9 5l7 7-7 7"/>',
+  paged: '<rect x="3" y="5" width="4" height="14" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="5" width="4" height="14" rx="1"/>',
+  scrolled: '<path d="M5 4h14M5 9h14M5 14h14M5 19h14"/>',
+  chapterView: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+  alignLeft: '<path d="M4 6h16M4 10h11M4 14h16M4 18h11"/>',
+  alignJustify: '<path d="M4 6h16M4 10h16M4 14h16M4 18h16"/>',
   flame: '<path d="M12 21c-4 0-6.5-2.6-6.5-6 0-4.2 4-6.5 4.5-11 3 2 4.6 4.3 4.6 6.5 1-.6 1.6-1.8 1.8-3 1.4 1.4 2.1 3.6 2.1 5.5 0 4.3-2.7 8-6.5 8z"/>',
 };
 
@@ -150,4 +155,30 @@ export function stars(rating, cls = '') {
   let s = `<div class="stars ${cls}" data-rating="${rating}">`;
   for (let i = 1; i <= 5; i++) s += `<button class="star ${i <= rating ? 'on' : ''}" data-star="${i}" aria-label="${i} star">${icon('star')}</button>`;
   return s + '</div>';
+}
+
+// A -/+ row: values only change on a deliberate tap, never from brushing a slider.
+export function stepper(key, label, value) {
+  return `<div class="step-row"><div class="step-text"><span>${esc(label)}</span><small data-out="${key}">${esc(value)}</small></div>
+    <button class="step-btn" data-dec="${key}" aria-label="Less ${esc(label)}">−</button><button class="step-btn" data-inc="${key}" aria-label="More ${esc(label)}">+</button></div>`;
+}
+
+export function stepValue(cfg, current, dir) {
+  const v = Math.round((current + dir * cfg.step) * 1000) / 1000;
+  return Math.max(cfg.min, Math.min(cfg.max, v));
+}
+
+// Puts a floating menu just below a rect on screen (above it when there's no room),
+// with a little arrow pointing at the selection.
+export function placeBelow(el, rect) {
+  const gap = matchMedia('(pointer: coarse)').matches ? 30 : 12; // clear the phone's selection handles
+  const bw = el.offsetWidth, bh = el.offsetHeight, vw = innerWidth, vh = innerHeight;
+  let top = rect.bottom + gap, above = false;
+  if (top + bh > vh - 10) { top = Math.max(10, rect.top - bh - 12); above = true; }
+  const cx = rect.left + rect.width / 2;
+  const left = Math.max(8, Math.min(vw - bw - 8, cx - bw / 2));
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  el.style.setProperty('--ax', `${Math.max(16, Math.min(bw - 16, cx - left))}px`);
+  el.classList.toggle('above', above);
 }

@@ -1,7 +1,7 @@
 // Reading mode for PDFs (pdf.js): flip pages, scroll, or scroll a chapter at a time,
 // with page tones, zoom, brightness, highlights, notes, bookmarks and favourite pages.
 import { db, uid } from './db.js';
-import { icon, esc, $, $$, openSheet, toast, promptSheet, stars, closeAllSheets, sheetOpen, closeSheet } from './ui.js';
+import { icon, esc, $, $$, openSheet, toast, promptSheet, stars, closeAllSheets, sheetOpen, closeSheet, stepper, stepValue, placeBelow } from './ui.js';
 import { pdfLib } from './meta.js';
 
 const TONES = {
@@ -447,6 +447,7 @@ function onSelectionChange() {
     P.sel = { page: +pageEl.dataset.page, rects, text };
     P.el.classList.add('selecting');
     P.el.classList.remove('chrome');
+    placeBelow($('.r-sel', P.el), range.getBoundingClientRect());
   }, 250);
 }
 
@@ -599,32 +600,38 @@ function applyTone() {
   $('.r-warm', P.el).style.opacity = (P.prefs.warmth * 0.32).toFixed(2);
 }
 
+const STEPS = {
+  zoom:       { label: 'Zoom',       step: 0.1, min: 0.6, max: 4, fmt: v => `${Math.round(v * 100)}%` },
+  brightness: { label: 'Brightness', step: 0.1, min: 0.3, max: 1, fmt: v => `${Math.round(v * 100)}%` },
+  warmth:     { label: 'Warmth',     step: 0.1, min: 0,   max: 1, fmt: v => v ? `${Math.round(v * 100)}%` : 'Off' },
+};
+
 function openSettings() {
   const p = P.prefs;
+  const views = [['paginated', 'paged', 'Paged'], ['scrolled', 'scrolled', 'Scrolled'], ['chapter', 'chapterView', 'Chapter']];
   openSheet(`<div class="r-settings">
-    <span class="label">Page colour</span>
-    <div class="page-themes">${Object.entries(TONES).map(([k, t]) => `<button class="pt ${p.tone === k ? 'on' : ''}" data-tone="${k}" style="background:${t.dark ? t.bg : '#fff'};color:${t.dark ? '#ddd' : '#222'};filter:${t.dark ? 'none' : t.filter}">Aa<span>${t.name}</span></button>`).join('')}</div>
-    <span class="label">Zoom <small class="muted" data-out="zoom">${Math.round(p.zoom * 100)}%</small></span>
-    <div class="size-row"><button class="btn small ghost" data-zoom="-0.15">−</button><input type="range" min="0.6" max="4" step="0.05" value="${p.zoom}" data-range="zoom"><button class="btn small ghost" data-zoom="0.15">+</button></div>
-    <span class="label">Brightness</span>
-    <div class="vol-row">${icon('sun')}<input type="range" min="0.25" max="1" step="0.01" value="${p.brightness}" data-range="brightness"></div>
-    <span class="label">Warmth <small class="muted">— easier on the eyes at night</small></span>
-    <input type="range" min="0" max="1" step="0.01" value="${p.warmth}" data-range="warmth">
-    <span class="label">Page view</span>
-    <div class="chips"><button class="chip ${p.flow === 'paginated' ? 'on' : ''}" data-flow="paginated">⇆ Flip left / right</button>
-      <button class="chip ${p.flow === 'scrolled' ? 'on' : ''}" data-flow="scrolled">⇅ Scroll up / down</button>
-      <button class="chip ${p.flow === 'chapter' ? 'on' : ''}" data-flow="chapter">▤ Scroll a chapter, flip to the next</button></div>
+    <div class="view-modes">${views.map(([k, ic, n]) => `<button class="vm ${p.flow === k ? 'on' : ''}" data-flow="${k}">${icon(ic)}<span>${n}</span></button>`).join('')}</div>
+    <div class="set-block">
+      <span class="set-title">Page tone</span>
+      <div class="theme-dots">${Object.entries(TONES).map(([k, t]) => `<button class="tdot ${p.tone === k ? 'on' : ''}" data-tone="${k}" title="${t.name}" style="background:${t.dark ? t.bg : k === 'white' ? '#fff' : t.bg};color:${t.dark ? '#ddd' : '#222'}">${icon('check')}</button>`).join('')}</div>
+    </div>
+    <div class="set-block steps">${Object.keys(STEPS).map(k => stepper(k, STEPS[k].label, STEPS[k].fmt(p[k]))).join('')}</div>
   </div>`, {
     className: 'reader-settings',
     onMount: (sheet) => {
       sheet.addEventListener('click', e => {
         const t = e.target.closest('button');
         if (!t) return;
-        if (t.dataset.tone) { p.tone = t.dataset.tone; $$('[data-tone]', sheet).forEach(b => b.classList.toggle('on', b === t)); applyTone(); P.savePrefs(p); }
-        if (t.dataset.zoom) {
-          zoom(+t.dataset.zoom);
-          $('[data-range=zoom]', sheet).value = p.zoom; $('[data-out=zoom]', sheet).textContent = Math.round(p.zoom * 100) + '%';
+        const key = t.dataset.inc || t.dataset.dec;
+        if (key) {
+          const cfg = STEPS[key];
+          p[key] = stepValue(cfg, p[key], t.dataset.inc ? 1 : -1);
+          $(`[data-out="${key}"]`, sheet).textContent = cfg.fmt(p[key]);
+          P.savePrefs(p);
+          if (key === 'zoom') layout(); else applyTone();
+          return;
         }
+        if (t.dataset.tone) { p.tone = t.dataset.tone; $$('[data-tone]', sheet).forEach(b => b.classList.toggle('on', b === t)); applyTone(); P.savePrefs(p); }
         if (t.dataset.flow && t.dataset.flow !== p.flow) {
           p.flow = t.dataset.flow;
           $$('[data-flow]', sheet).forEach(b => b.classList.toggle('on', b === t));
@@ -632,14 +639,6 @@ function openSettings() {
           layout();
         }
       });
-      sheet.addEventListener('input', e => {
-        const r = e.target.dataset.range;
-        if (!r) return;
-        p[r] = parseFloat(e.target.value);
-        if (r === 'zoom') $('[data-out=zoom]', sheet).textContent = Math.round(p.zoom * 100) + '%';
-        else { applyTone(); P.savePrefs(p); }
-      });
-      sheet.addEventListener('change', e => { if (e.target.dataset.range === 'zoom') { P.savePrefs(p); layout(); } });
     },
   });
 }
