@@ -631,3 +631,7 @@ body.widget-mode .case { cursor: pointer; }
 .saved-row small { color: var(--muted); font-size: 12px; }
 .hl-layer i.flash { animation: hlFlash 2.4s ease-out; opacity: .42; }
 @keyframes hlFlash { 0%, 30%, 60% { opacity: .9; box-shadow: 0 0 0 3px #f2a548; } 15%, 45% { opacity: .3; } 100% { opacity: .42; box-shadow: none; } }
+
+/* ---------- logo ---------- */
+.brand-logo { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 4px 14px rgba(40, 10, 25, .45); flex: none; }
+.welcome-logo { display: block; width: 72px; height: 72px; margin: 6px auto 0; border-radius: 18px; box-shadow: 0 10px 28px rgba(40, 10, 25, .5); }

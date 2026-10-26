@@ -168,7 +168,7 @@ async function saveBook(b) {
 function buildChrome() {
   $('#app').innerHTML = `
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">${icon('flame')}</span><span>Fable</span></div>
+    <div class="brand"><img class="brand-logo" src="icons/icon-96.png" alt="" width="36" height="36"><span>Fable</span></div>
     <div class="top-actions">
       <button class="icon-btn" data-act="search" title="Find books online">${icon('search')}</button>
       <button class="icon-btn" data-act="view" title="Covers or spines">${icon('spines')}</button>
@@ -1273,7 +1273,7 @@ function renderGreeting() {
 function openWelcome(editing = false) {
   const name = (S.profile && S.profile.name) || '';
   openSheet(`<div class="confirm welcome">
-    ${editing ? '<h3>Your name</h3>' : `<span class="welcome-mark">${icon('flame')}</span><h3>Welcome to Fable</h3><p>Your cozy shelf for every book you've read, are reading, and want to read.</p>`}
+    ${editing ? '<h3>Your name</h3>' : `<img class="welcome-logo" src="icons/icon-192.png" alt="" width="72" height="72"><h3>Welcome to Fable</h3><p>Your cozy shelf for every book you've read, are reading, and want to read.</p>`}
     <label class="muted small">What should we call you?</label>
     <input type="text" value="${esc(name)}" placeholder="Your name" autocomplete="given-name" maxlength="40">
     <div class="btn-row">${editing ? '<button class="btn ghost" data-close>Cancel</button>' : ''}<button class="btn primary" data-save>${editing ? 'Save' : "Let's begin"}</button></div></div>`, {
